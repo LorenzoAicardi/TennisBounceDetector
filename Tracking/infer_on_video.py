@@ -7,6 +7,8 @@ import numpy as np
 import argparse
 from itertools import groupby
 from scipy.spatial import distance
+import pandas as pd
+import os
 
 def read_video(path_video):
     """ Read video file    
@@ -42,10 +44,12 @@ def infer_model(frames, model):
     width = 640
     dists = [-1]*2
     ball_track = [(None,None)]*2
+    df = pd.DataFrame(columns=['timestamp', 'x', 'y'])
+
     for num in tqdm(range(2, len(frames))):
         # Section added by me to account for videos of different sizes
-        # imh, imw, imc = frames[0].shape
-        # scale = h/height
+        imh, imw, imc = frames[0].shape
+        scale = imh/height
          
         img = cv2.resize(frames[num], (width, height))
         img_prev = cv2.resize(frames[num-1], (width, height))
@@ -57,14 +61,23 @@ def infer_model(frames, model):
 
         out = model(torch.from_numpy(inp).float().to(device))
         output = out.argmax(dim=1).detach().cpu().numpy()
-        x_pred, y_pred = postprocess(output, 2) # postprocess(output, scale)
+
+        x_pred, y_pred = postprocess(output, scale)
         ball_track.append((x_pred, y_pred))
+        new_row = {'timestamp': num, 
+                   'x': x_pred, 
+                   'y': y_pred}
+        df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
 
         if ball_track[-1][0] and ball_track[-2][0]:
             dist = distance.euclidean(ball_track[-1], ball_track[-2])
         else:
             dist = -1
         dists.append(dist)  
+
+    name = os.path.splitext(os.path.split(args.video_path)[1])[0]
+    df.to_csv('../outcsv/' + name + '.csv')
+   
     return ball_track, dists 
 
 def remove_outliers(ball_track, dists, max_dist = 100):
