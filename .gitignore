@@ -2,3 +2,6 @@ videoin/*
 videoout/*
 models/yoloV5_2k.pt
 outcsv/*
+g31cpredict.mp4
+output_video.mp4
+otherattempts.py

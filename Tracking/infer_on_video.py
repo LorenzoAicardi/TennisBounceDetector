@@ -76,7 +76,7 @@ def infer_model(frames, model):
         dists.append(dist)  
 
     name = os.path.splitext(os.path.split(args.video_path)[1])[0]
-    df.to_csv('../outcsv/' + name + '.csv')
+    df.to_csv('outcsv/' + name + '.csv')
    
     return ball_track, dists 
 
@@ -149,7 +149,7 @@ def interpolation(coords):
     return track
 
 def write_track(frames, ball_track, path_output_video, fps, trace=7):
-    """ Write .avi file with detected ball tracks
+    """ Write .mp4 file with detected ball tracks
     :params
         frames: list of original video frames
         ball_track: list of ball coordinates

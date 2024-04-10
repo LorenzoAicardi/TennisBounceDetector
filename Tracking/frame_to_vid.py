@@ -1,8 +1,8 @@
 import cv2
 import os
 
-image_folder = r'C:/Users/loren/Desktop/tennis/game2/Clip1'
-video_name = 'output.mp4'
+image_folder = r'C:/Users/loren/Desktop/tennis/game3/Clip1'
+video_name = 'g3c1.mp4'
 
 images = [img for img in os.listdir(image_folder) if img.endswith(".jpg")]
 frame = cv2.imread(os.path.join(image_folder, images[0]))
