@@ -26,8 +26,17 @@ def parse():
 
 """With simple angle checking"""
 def bounce_angle_wrapping(x, y, args):
-    t = np.degrees(np.arctan2(np.diff(y), np.diff(x)))
-    dt = np.degrees(np.diff(t))
+    
+    """Plotting bounces"""
+    def plot_bounces(x, y, ix, dt):
+        plt.plot(x[ix + 1], y[ix + 1], 'or')  # Plotting points where angle difference > 150
+        plt.plot(x, y)  
+        for i in range(len(ix)):
+            plt.text(x[ix[i] + 1], y[ix[i] + 1], str(dt[ix[i]]))
+        plt.show()
+
+    t = np.degrees(np.arctan2(np.diff(y), np.diff(x))) # Calculate angle of each line
+    dt = np.degrees(np.diff(t)) # Calculate angle between lines
     dt = (dt + 180) % 360 - 180  # Wrap angles to [-180, 180)
 
     # Find indices where angle difference > 150
@@ -40,8 +49,8 @@ def bounce_angle_wrapping(x, y, args):
 """With Ramer-Douglas-Pecker algorithm"""
 def rdp_algo(x, y, args):
 
+    """Finds indices of bounces in the points list instead of the simplified trajectory."""
     def find_indices(points, sp, idx):
-        """Find the indices of the turning points found relative to the points list."""
         ix = []
 
         for index in idx:
@@ -49,6 +58,7 @@ def rdp_algo(x, y, args):
 
         return ix
 
+    """Finds angles between lines in the simplified trajectory."""
     def angle(dir):
         """
         Returns the angles between vectors.
@@ -68,64 +78,126 @@ def rdp_algo(x, y, args):
         return np.arccos((dir1*dir2).sum(axis=1)/(
             np.sqrt((dir1**2).sum(axis=1)*(dir2**2).sum(axis=1))))
 
-    tolerance = 70
-    min_angle = np.pi*0.22
+    """Eliminates groups of redundant points from indices, as not to draw too many crosses."""
+    """This is done by taking, among all the identified points, the middle one. Better approaces will be found."""
+    def eliminate_redundant_points(x, y, ix):
+        def cluster(data, maxgap):
+            '''Arrange data into groups where successive elements
+            differ by no more than *maxgap*
+
+                >>> cluster([1, 6, 9, 100, 102, 105, 109, 134, 139], maxgap=10)
+                [[1, 6, 9], [100, 102, 105, 109], [134, 139]]
+
+                >>> cluster([1, 6, 9, 99, 100, 102, 105, 134, 139, 141], maxgap=10)
+                [[1, 6, 9], [99, 100, 102, 105], [134, 139, 141]]
+
+            '''
+            data.sort()
+            groups = [[data[0]]]
+            for x in data[1:]:
+                if abs(x - groups[-1][-1]) <= maxgap:
+                    groups[-1].append(x)
+                else:
+                    groups.append([x])
+            return groups
+        
+        def get_min(groups):
+            points = []
+            min = 100000
+            min_idx = -1
+
+            for group in groups:
+                
+                for idx in group:
+                    if y[idx] < min:
+                        min = y[idx]
+                        min_idx = idx
+                
+                min = 100000
+                points.append(min_idx)
+                min_idx = -1
+
+            return points
+        
+        def get_midpoint(groups):
+            points = []
+            for group in groups:
+                i = 1-int(np.ceil(len(group)/2))
+                points.append(group[i])
+            
+            return points
+        
+        groups = cluster(ix, 1)
+        
+        # points = get_midpoint(groups)
+
+        points = get_min(groups)
+
+        return points
+    
+    """Plots bouncing points."""
+    def plot_bounces(x, y, sx, sy, ix):
+        fig = plt.figure()
+        ax =fig.add_subplot(111)
+
+        ax.plot(x, y, 'b-', label='original path')
+        ax.plot(sx, sy, 'g--', label='simplified path')
+        ax.plot(x[ix], y[ix], 'ro', markersize = 10, label='turning points')
+
+        # Displays indices from the normal trajectory
+        i = 0
+        for x, y in zip(x[ix], y[ix]):
+            ax.text(x, y, str(ix[i]), color="black", fontsize=8)
+            i = i+1
+        
+        ax.invert_yaxis()
+        plt.legend(loc='best')
+        plt.show()
+        
+    tolerance = 1e-5 # a normal value is 70
+    min_angle = np.pi*0.18 # min angle = np.pi*0.22
     
     points = list(zip(x.to_list(), y.to_list()))
-    print(len(points))
+    # print(len(points))
 
     # Use the Ramer-Douglas-Peucker algorithm to simplify the path
     # http://en.wikipedia.org/wiki/Ramer-Douglas-Peucker_algorithm
     # Python implementation: https://github.com/sebleier/RDP/
     simplified = np.array(rdp.rdp(points, tolerance))
 
-    print(len(simplified))
+    # print(len(simplified))
     sx, sy = simplified.T
-
-    print(sx, sy)
 
     # compute the direction vectors on the simplified curve
     directions = np.diff(simplified, axis=0)
     theta = angle(directions)
-    # Select the index of the points with the greatest theta
+    # Select the index of the points (in the simplified trajectory) with the greatest theta
     # Large theta is associated with greatest change in direction.
-    idx = np.where(theta>min_angle)[0]+1
+    idx_simple_trajectory = np.where(theta>min_angle)[0]+1
 
-    fig = plt.figure()
-    ax =fig.add_subplot(111)
+    # Return real indices of bouncing points
+    ix = find_indices(points, list(zip(sx, sy)), idx_simple_trajectory)
+    print(ix)
 
-    ax.plot(x, y, 'b-', label='original path')
-    ax.plot(sx, sy, 'g--', label='simplified path')
-    ax.plot(sx[idx], sy[idx], 'ro', markersize = 10, label='turning points')
-    ax.invert_yaxis()
-    plt.legend(loc='best')
-    plt.show()
-
-    ix = find_indices(points, list(zip(sx, sy)), idx)
+    # Filter redundant points via clustering
+    ix = eliminate_redundant_points(x, y, ix)
+    print(ix)
+    
+    plot_bounces(x, y, sx, sy, ix)
 
     draw_video(ix, args)
 
-"""Plotting bounces"""
-def plot_bounces(x, y, ix, dt):
-    plt.plot(x[ix + 1], y[ix + 1], 'or')  # Plotting points where angle difference > 150
-    plt.plot(x, y)  
-    for i in range(len(ix)):
-        plt.text(x[ix[i] + 1], y[ix[i] + 1], str(dt[ix[i]]))
-    plt.show()
-
-"""Drawing on video"""
+"""Drawing on video."""
 def draw_video(ix, args):
-    video_capture = cv2.VideoCapture(args.path_to_video)
+    if os.path.exists(args.path_to_video):
+        video_capture = cv2.VideoCapture(args.path_to_video)
+    else:
+        print("Wrong")
 
     # Video properties
     fps = int(video_capture.get(cv2.CAP_PROP_FPS))
     width = int(video_capture.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-    # Compensation for 1920x1080 videos
-    scale = 1
-    if width == 1920:
-        scale = 2/3
 
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter(args.path_to_output_video, fourcc, fps, (width, height))
@@ -146,7 +218,7 @@ def draw_video(ix, args):
 
         # Draw crosses at the specified (x, y) positions every frame onwards from bounce detection
         for item in visited:
-            draw_cross(frame, x[item]*scale, y[item]*scale)
+            draw_cross(frame, x[item], y[item])
 
         out.write(frame)
         i = i+1
