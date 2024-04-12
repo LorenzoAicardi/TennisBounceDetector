@@ -44,7 +44,7 @@ def infer_model(frames, model):
     width = 640
     dists = [-1]*2
     ball_track = [(None,None)]*2
-    df = pd.DataFrame(columns=['timestamp', 'x', 'y'])
+    #df = pd.DataFrame(columns=['timestamp', 'x', 'y'])
 
     for num in tqdm(range(2, len(frames))):
         # Section added by me to account for videos of different sizes
@@ -64,10 +64,11 @@ def infer_model(frames, model):
 
         x_pred, y_pred = postprocess(output, scale)
         ball_track.append((x_pred, y_pred))
-        new_row = {'timestamp': num, 
-                   'x': x_pred, 
-                   'y': y_pred}
-        df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+        # new_row = {'timestamp': num, 
+        #            'x': x_pred, 
+        #            'y': y_pred}
+        #df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+        
 
         if ball_track[-1][0] and ball_track[-2][0]:
             dist = distance.euclidean(ball_track[-1], ball_track[-2])
@@ -75,8 +76,8 @@ def infer_model(frames, model):
             dist = -1
         dists.append(dist)  
 
-    name = os.path.splitext(os.path.split(args.video_path)[1])[0]
-    df.to_csv('outcsv/' + name + '.csv')
+    #name = os.path.splitext(os.path.split(args.video_path)[1])[0]
+    #df.to_csv('./../outcsv/' + name + '.csv')
    
     return ball_track, dists 
 
@@ -160,18 +161,32 @@ def write_track(frames, ball_track, path_output_video, fps, trace=7):
     height, width = frames[0].shape[:2]
     out = cv2.VideoWriter(path_output_video, cv2.VideoWriter_fourcc(*'mp4v'), 
                           fps, (width, height))
+    pred_frames=0
+    max_trace_index=[]
     for num in range(len(frames)):
         frame = frames[num]
+        count_traced = 0
+        j_max=0
         for i in range(trace):
-            if (num-i > 0):
+            if (num+1-i > 0):
                 if ball_track[num-i][0]:
                     x = int(ball_track[num-i][0])
                     y = int(ball_track[num-i][1])
+                    count_traced=1
                     frame = cv2.circle(frame, (x,y), radius=0, color=(0, 0, 255), thickness=10-i)
+                    j_max=i
                 else:
                     break
-        out.write(frame) 
-    out.release()    
+        max_trace_index.append(j_max)
+        if count_traced:
+            pred_frames+=1
+        else:
+         print('No ball detected in frame:', num)
+        out.write(frame)
+    print('Frames with detected ball:', pred_frames)
+    print('Total frames:', len(frames)) 
+    out.release()
+    return max_trace_index    
 
 if __name__ == '__main__':
     
@@ -184,7 +199,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     model = BallTrackerNet()
-    device = 'cuda'
+    if(torch.cuda.is_available()):
+        device = 'cuda'
+    else:
+        device = 'cpu'
     model.load_state_dict(torch.load(args.model_path, map_location=device))
     model = model.to(device)
     model.eval()
@@ -200,5 +218,10 @@ if __name__ == '__main__':
             ball_subtrack = interpolation(ball_subtrack)
             ball_track[r[0]:r[1]] = ball_subtrack
         
-    write_track(frames, ball_track, args.video_out_path, fps)
+    indices=write_track(frames, ball_track, args.video_out_path, fps)
+    print(indices)
+    print(ball_track)
+    # transform ball track in a dataframe
+    df = pd.DataFrame(ball_track, columns=['x', 'y'])
+    df.to_csv('./../outcsv/ball_track.csv', index=False)
     
