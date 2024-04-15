@@ -11,18 +11,58 @@ import pathlib
 from pathlib import Path
 import rdp
 
+"""Helper function to draw crosses on each frame if a bounce is detected."""
 def draw_cross(frame, x, y, size=10, color=(255, 0, 0), thickness=2):
     if not math.isnan(x):
         x, y = int(x), int(y)  # Convert coordinates to integers
         cv2.line(frame, (x - size, y - size), (x + size, y + size), color, thickness)
         cv2.line(frame, (x - size, y + size), (x + size, y - size), color, thickness)
 
+"""Parse input. A sample command is in the README."""
 def parse():
     parser = argparse.ArgumentParser()
     parser.add_argument('--path_to_csv', type=str, help='path to csv')
     parser.add_argument('--path_to_video', type=str, help='path to inferred video')
     parser.add_argument('--path_to_output_video', type=str, help='path to save the video with marked bounces')
     return parser.parse_args()
+
+"""Drawing on video."""
+def draw_video(ix, args):
+    if os.path.exists(args.path_to_video):
+        video_capture = cv2.VideoCapture(args.path_to_video)
+    else:
+        print("The specified file does not exist.")
+
+    # Video properties
+    fps = int(video_capture.get(cv2.CAP_PROP_FPS))
+    width = int(video_capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(args.path_to_output_video, fourcc, fps, (width, height))
+
+    # Variables for storing frames where a bounce is detected
+    i = 0
+    visited = []
+    while True:
+        ret, frame = video_capture.read()
+
+        if not ret:
+            break
+
+        # If at that frame a bounce is detected, mark the bounce as visited
+        if i in ix:
+            visited.append(i)
+
+        # Draw crosses at the specified (x, y) positions every frame onwards from bounce detection
+        for item in visited:
+            draw_cross(frame, x[item], y[item])
+
+        out.write(frame)
+        i = i+1
+
+    video_capture.release()
+    out.release()
 
 """With simple angle checking"""
 def bounce_angle_wrapping(x, y, args):
@@ -57,7 +97,7 @@ def rdp_algo(x, y, args):
             ix.append(points.index(sp[index]))
 
         return ix
-
+    
     """Finds angles between lines in the simplified trajectory."""
     def angle(dir):
         """
@@ -75,12 +115,13 @@ def rdp_algo(x, y, args):
         """
         dir2 = dir[1:]
         dir1 = dir[:-1]
-        return np.arccos((dir1*dir2).sum(axis=1)/(
-            np.sqrt((dir1**2).sum(axis=1)*(dir2**2).sum(axis=1))))
+        return np.arccos(
+            (dir1*dir2).sum(axis=1)/(np.sqrt((dir1**2).sum(axis=1)*(dir2**2).sum(axis=1)))
+                         )
 
     """Eliminates groups of redundant points from indices, as not to draw too many crosses."""
     """This is done by taking, among all the identified points, the middle one. Better approaces will be found."""
-    def eliminate_redundant_points(x, y, ix):
+    def eliminate_redundant_points(x, y, sx, sy, ix):
         def cluster(data, maxgap):
             '''Arrange data into groups where successive elements
             differ by no more than *maxgap*
@@ -120,20 +161,32 @@ def rdp_algo(x, y, args):
             return points
         
         def get_midpoint(groups):
-            points = []
+            mps = []
             for group in groups:
-                i = 1-int(np.ceil(len(group)/2))
-                points.append(group[i])
+                i = 1-int(np.ceil(len(group)/2)) # Group centroid
+                mps.append(group[i])
             
-            return points
-        
+            return mps
+
         groups = cluster(ix, 1)
         
-        # points = get_midpoint(groups)
+        new_indices = get_midpoint(groups)
+        # new_indices = get_min(groups)
 
-        points = get_min(groups)
-
-        return points
+        # Remove points if the y axis before and after are lower (using < for convention)
+        """ buf = []
+        for j in range(len(new_indices)-1):
+            interest = new_indices[j]
+            prev_neigh = interest-1
+            next_neigh = interest+1
+            if (y[interest] <= y[prev_neigh]) and (y[interest] <= y[next_neigh]):
+                # print( "Found parabola peak: " + str(x[i]) + ", " + str(y[i]) )
+                # print("index: " + str(i))
+                buf.append(interest)
+        s = set(buf)        
+        result = [x for x in new_indices if x not in s] """
+        
+        return new_indices
     
     """Plots bouncing points."""
     def plot_bounces(x, y, sx, sy, ix):
@@ -154,11 +207,10 @@ def rdp_algo(x, y, args):
         plt.legend(loc='best')
         plt.show()
         
-    tolerance = 1e-5 # a normal value is 70
-    min_angle = np.pi*0.18 # min angle = np.pi*0.22
+    tolerance = 5 # a normal value is 70
+    min_angle = np.pi*0.15 # min angle = np.pi*0.15 works fine
     
     points = list(zip(x.to_list(), y.to_list()))
-    # print(len(points))
 
     # Use the Ramer-Douglas-Peucker algorithm to simplify the path
     # http://en.wikipedia.org/wiki/Ramer-Douglas-Peucker_algorithm
@@ -167,6 +219,7 @@ def rdp_algo(x, y, args):
 
     # print(len(simplified))
     sx, sy = simplified.T
+    # print(sx, sy)
 
     # compute the direction vectors on the simplified curve
     directions = np.diff(simplified, axis=0)
@@ -175,65 +228,82 @@ def rdp_algo(x, y, args):
     # Large theta is associated with greatest change in direction.
     idx_simple_trajectory = np.where(theta>min_angle)[0]+1
 
+    print(idx_simple_trajectory)
     # Return real indices of bouncing points
     ix = find_indices(points, list(zip(sx, sy)), idx_simple_trajectory)
-    print(ix)
+    # ix = idx_simple_trajectory
+    # print(ix)
 
     # Filter redundant points via clustering
-    ix = eliminate_redundant_points(x, y, ix)
-    print(ix)
+    ix = eliminate_redundant_points(x, y, sx, sy, ix)
+    # print(ix)
     
     plot_bounces(x, y, sx, sy, ix)
 
     draw_video(ix, args)
 
-"""Drawing on video."""
-def draw_video(ix, args):
-    if os.path.exists(args.path_to_video):
-        video_capture = cv2.VideoCapture(args.path_to_video)
-    else:
-        print("Wrong")
+"""Velocity based approach."""
+def velocity_approach(x, y, args): 
 
-    # Video properties
-    fps = int(video_capture.get(cv2.CAP_PROP_FPS))
-    width = int(video_capture.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    # Function to calculate velocity
+    def calculate_velocity(x, y, dt):
+        dx = np.diff(x)
+        dy = np.diff(y)
+        distance = np.sqrt(dx**2 + dy**2)
+        velocity = distance / dt
+        return velocity
 
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(args.path_to_output_video, fourcc, fps, (width, height))
+    # time = df.timestamp  # Time points
 
-    # Variables for storing frames where a bounce is detected
-    i = 0
-    visited = []
+    # Calculate time differences
+    # dt = np.diff(time)
 
-    while True:
-        ret, frame = video_capture.read()
+    # Calculate velocity
+    velocity = calculate_velocity(x, y, 3) # 3rd param is dt
 
-        if not ret:
-            break
+    # Detect abrupt changes (threshold for velocity change)
+    threshold = 10  # Adjust as needed
+    ix = np.where(np.abs(np.diff(velocity)) > threshold)[0]
+    print(ix)
 
-        # If at that frame a bounce is detected, mark the bounce as visited
-        if i in ix:
-            visited.append(i)
+    # Plot trajectory
+    plt.plot(x, y, '-o')
 
-        # Draw crosses at the specified (x, y) positions every frame onwards from bounce detection
-        for item in visited:
-            draw_cross(frame, x[item], y[item])
+    # Mark abrupt changes
+    if ix.size > 0:
+        plt.plot(x[ix+1], y[ix+1], 'rx', markersize=10, label='Abrupt change')
 
-        out.write(frame)
-        i = i+1
+    plt.legend()
+    plt.xlabel('X')
+    plt.ylabel('Y')
+    plt.title('Trajectory with Abrupt Changes')
+    plt.grid(True)
+    plt.show()
 
-    video_capture.release()
-    out.release()
+    draw_video(ix, args)
 
+# Height of net in the middle: 3 ft
+# Court height and width: 78 ft, 36 ft
+# A: 0, 0
+# B: 0, 36
+# C: 78, 0
+# D: 78, 36
+# E: net middle point
+
+# Find line at the infnity
 if __name__ == '__main__':
+
+    # Parse input
     args = parse()
 
-    columns = ['timestamp', 'x', 'y']
+    # Obtain coordinates from csv
+    columns = ['x', 'y']
     df = pd.read_csv(args.path_to_csv, usecols=columns)
     x = df.x
     y = df.y
 
-    # bounce_angle_wrapping(x, y, args)
-    
-    rdp_algo(x, y, args)
+    # Detection methods
+
+    # bounce_angle_wrapping(x, y, args)    
+    # rdp_algo(x, y, args)
+    velocity_approach(x, y, args)

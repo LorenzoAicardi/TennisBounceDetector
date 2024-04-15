@@ -196,6 +196,8 @@ if __name__ == '__main__':
     parser.add_argument('--video_path', type=str, help='path to input video')
     parser.add_argument('--video_out_path', type=str, help='path to output video')
     parser.add_argument('--extrapolation', action='store_true', help='whether to use ball track extrapolation')
+    
+    parser.add_argument('--video_name', type=str, help='video name')
     args = parser.parse_args()
     
     model = BallTrackerNet()
@@ -207,7 +209,15 @@ if __name__ == '__main__':
     model = model.to(device)
     model.eval()
     
+    """ dir = os.getcwd()
+    if dir == 'Tracking':
+        print(dir)
+        dir = os.path.dirname()
+    else:
+        pass """
+
     frames, fps = read_video(args.video_path)
+
     ball_track, dists = infer_model(frames, model)
     ball_track = remove_outliers(ball_track, dists)    
     
@@ -219,9 +229,14 @@ if __name__ == '__main__':
             ball_track[r[0]:r[1]] = ball_subtrack
         
     indices=write_track(frames, ball_track, args.video_out_path, fps)
-    print(indices)
-    print(ball_track)
+    # print(indices)
+    # print(ball_track)
     # transform ball track in a dataframe
+    
     df = pd.DataFrame(ball_track, columns=['x', 'y'])
-    df.to_csv('./../outcsv/ball_track.csv', index=False)
+
+    df.to_csv('C:/Users/loren/Desktop/TennisBounceDetector/outcsv/g4c1.csv', index=False)
+    
+    #name = os.path.splitext(os.path.split(args.video_path)[1])[0]
+    #df.to_csv('outcsv/' + name + '.csv')
     
