@@ -104,7 +104,7 @@ def rdp_algo(x, y, args):
         Returns the angles between vectors.
 
         Parameters:
-        dir is a 2D-array of shape (N,M) representing N vectors in M-dimensional space.
+        dir is a 2D-array of shape (N,M) representing N vectors in M-dimensional space. (Tot directions in 2D space).
 
         The return value is a 1D-array of values of shape (N-1,), with each value
         between 0 and pi.
@@ -113,11 +113,16 @@ def rdp_algo(x, y, args):
         pi/2 implies the vectors are orthogonal
         pi implies the vectors point in opposite directions
         """
+        #dir2 = dir[1:] # all excluding the last
+        #dir1 = dir[:-1] # all excluding the first
         dir2 = dir[1:]
         dir1 = dir[:-1]
-        return np.arccos(
+        radians = np.arccos(
             (dir1*dir2).sum(axis=1)/(np.sqrt((dir1**2).sum(axis=1)*(dir2**2).sum(axis=1)))
                          )
+
+        degrees = np.degrees(radians)
+        return degrees
 
     """Eliminates groups of redundant points from indices, as not to draw too many crosses."""
     """This is done by taking, among all the identified points, the middle one. Better approaces will be found."""
@@ -174,7 +179,8 @@ def rdp_algo(x, y, args):
         # new_indices = get_min(groups)
 
         # Remove points if the y axis before and after are lower (using < for convention)
-        """ buf = []
+        """
+        buf = []
         for j in range(len(new_indices)-1):
             interest = new_indices[j]
             prev_neigh = interest-1
@@ -184,7 +190,8 @@ def rdp_algo(x, y, args):
                 # print("index: " + str(i))
                 buf.append(interest)
         s = set(buf)        
-        result = [x for x in new_indices if x not in s] """
+        result = [x for x in new_indices if x not in s]
+        """
         
         return new_indices
     
@@ -193,7 +200,7 @@ def rdp_algo(x, y, args):
         fig = plt.figure()
         ax =fig.add_subplot(111)
 
-        ax.plot(x, y, 'b-', label='original path')
+        # ax.plot(x, y, 'b-', label='original path')
         ax.plot(sx, sy, 'g--', label='simplified path')
         ax.plot(x[ix], y[ix], 'ro', markersize = 10, label='turning points')
 
@@ -208,8 +215,8 @@ def rdp_algo(x, y, args):
         plt.show()
         
     tolerance = 5 # a normal value is 70
-    min_angle = np.pi*0.15 # min angle = np.pi*0.15 works fine
-    
+    min_angle = 25 # min angle = np.pi*0.15 works fine
+
     points = list(zip(x.to_list(), y.to_list()))
 
     # Use the Ramer-Douglas-Peucker algorithm to simplify the path
@@ -224,15 +231,16 @@ def rdp_algo(x, y, args):
     # compute the direction vectors on the simplified curve
     directions = np.diff(simplified, axis=0)
     theta = angle(directions)
+    print(theta)
+
     # Select the index of the points (in the simplified trajectory) with the greatest theta
     # Large theta is associated with greatest change in direction.
     idx_simple_trajectory = np.where(theta>min_angle)[0]+1
+    # theta_new = theta[idx_simple_trajectory]
+    # idx_simple_trajectory = np.where(theta_new<max_angle)[0]+1
 
-    print(idx_simple_trajectory)
     # Return real indices of bouncing points
     ix = find_indices(points, list(zip(sx, sy)), idx_simple_trajectory)
-    # ix = idx_simple_trajectory
-    # print(ix)
 
     # Filter redundant points via clustering
     ix = eliminate_redundant_points(x, y, sx, sy, ix)
@@ -242,7 +250,7 @@ def rdp_algo(x, y, args):
 
     draw_video(ix, args)
 
-"""Velocity based approach."""
+"""Velocity based approach. DO NOT USE."""
 def velocity_approach(x, y, args): 
 
     # Function to calculate velocity
@@ -305,5 +313,5 @@ if __name__ == '__main__':
     # Detection methods
 
     # bounce_angle_wrapping(x, y, args)    
-    # rdp_algo(x, y, args)
-    velocity_approach(x, y, args)
+    rdp_algo(x, y, args)
+    # velocity_approach(x, y, args)
