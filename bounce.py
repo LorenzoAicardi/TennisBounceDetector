@@ -99,7 +99,7 @@ def rdp_algo(x, y, args):
         return ix
     
     """Finds angles between lines in the simplified trajectory."""
-    def angle(dir):
+    def angle(dir, points):
         """
         Returns the angles between vectors.
 
@@ -113,8 +113,6 @@ def rdp_algo(x, y, args):
         pi/2 implies the vectors are orthogonal
         pi implies the vectors point in opposite directions
         """
-        #dir2 = dir[1:] # all excluding the last
-        #dir1 = dir[:-1] # all excluding the first
         dir2 = dir[1:]
         dir1 = dir[:-1]
         radians = np.arccos(
@@ -122,12 +120,42 @@ def rdp_algo(x, y, args):
                          )
 
         degrees = np.degrees(radians)
-        return degrees
+        
+        # Rebuild vectors for quandrant check
+        vectors = []
+        print(points.shape)
+        for i in range(len(points) - 2):
+            p1 = (points[i])
+            p2 = (points[i + 1])
+            p3 = (points[i + 2])
+
+            vector1 = np.array([p1[0] - p2[0], p1[1] - p2[1]])
+            vector2 = np.array([p3[0] - p2[0], p3[1] - p2[1]])
+
+            vectors.append((vector1, vector2))               
+
+        # Quadrant check
+        is_bounce = []
+        for i in range(0, len(vectors)):
+            # Vectors
+            first = np.array(vectors[i][0])
+            second = np.array(vectors[i][1])
+            
+            print("Vector pairs: ", first, second)
+            angle_rad = np.arctan2(np.linalg.norm(np.cross(first, second)), np.dot(first, second))
+            angle_deg = np.degrees(angle_rad)
+            #if np.linalg.norm(second) > 20:
+            is_bounce.append(not (angle_deg <= 90))
+            #else:
+            #    is_bounce.append(False)
+            
+            
+        return degrees, is_bounce
 
     """Eliminates groups of redundant points from indices, as not to draw too many crosses."""
-    """This is done by taking, among all the identified points, the middle one. Better approaces will be found."""
+    """This is done by taking the centroid of the cluster."""
     def eliminate_redundant_points(x, y, sx, sy, ix):
-        def cluster(data, maxgap):
+        def cluster_by_time(ix, maxgap):
             '''Arrange data into groups where successive elements
             differ by no more than *maxgap*
 
@@ -138,32 +166,38 @@ def rdp_algo(x, y, args):
                 [[1, 6, 9], [99, 100, 102, 105], [134, 139, 141]]
 
             '''
-            data.sort()
-            groups = [[data[0]]]
-            for x in data[1:]:
+            ix.sort()
+            groups = [[ix[0]]]
+            for x in ix[1:]:
                 if abs(x - groups[-1][-1]) <= maxgap:
                     groups[-1].append(x)
                 else:
                     groups.append([x])
+                    
+            
             return groups
         
-        def get_min(groups):
-            points = []
-            min = 100000
-            min_idx = -1
-
+        def cluster_by_space(groups, x, y):
+            print(groups)
+            new_groups = []
             for group in groups:
-                
-                for idx in group:
-                    if y[idx] < min:
-                        min = y[idx]
-                        min_idx = idx
-                
-                min = 100000
-                points.append(min_idx)
-                min_idx = -1
+                points = []
+                new_group = [group[0]] # a new group that has as a first item the first element of the current group, which is an index
 
-            return points
+                for i in group: # all points in the current group
+                    points.append(np.array(x[i], y[i]))
+
+                for i in range(len(points)-1):
+                    gap = np.linalg.norm(points[i+1]-points[i]) # gap between 2 points in a group
+                    if gap > 10: # if over a certain threshold
+                        new_groups.append(new_group) # I need to create a new group 
+                        new_group = [group[i+1]] 
+                    else:
+                        new_group.append(group[i+1])
+                
+                new_groups.append(new_group)
+            print(new_groups)
+            return new_groups
         
         def get_midpoint(groups):
             mps = []
@@ -173,28 +207,16 @@ def rdp_algo(x, y, args):
             
             return mps
 
-        groups = cluster(ix, 1)
-        
+        groups = cluster_by_time(ix, 1)
+        #groups = cluster_by_space(groups, x, y)
         new_indices = get_midpoint(groups)
-        # new_indices = get_min(groups)
 
-        # Remove points if the y axis before and after are lower (using < for convention)
-        """
-        buf = []
-        for j in range(len(new_indices)-1):
-            interest = new_indices[j]
-            prev_neigh = interest-1
-            next_neigh = interest+1
-            if (y[interest] <= y[prev_neigh]) and (y[interest] <= y[next_neigh]):
-                # print( "Found parabola peak: " + str(x[i]) + ", " + str(y[i]) )
-                # print("index: " + str(i))
-                buf.append(interest)
-        s = set(buf)        
-        result = [x for x in new_indices if x not in s]
-        """
+        #new_groups = cluster(new_indices, 8)
+
+        #new_indices = get_first(new_groups)
         
         return new_indices
-    
+
     """Plots bouncing points."""
     def plot_bounces(x, y, sx, sy, ix):
         fig = plt.figure()
@@ -230,21 +252,27 @@ def rdp_algo(x, y, args):
 
     # compute the direction vectors on the simplified curve
     directions = np.diff(simplified, axis=0)
-    theta = angle(directions)
-    print(theta)
+    print(directions)
+    # Determine the quadrants each vector lies in
+    # quadrants_directions = np.sign(directions)
 
+    # Check if the angle is predominantly in the first or fourth quadrant
+    theta, is_bounce = angle(directions, simplified)
     # Select the index of the points (in the simplified trajectory) with the greatest theta
     # Large theta is associated with greatest change in direction.
     idx_simple_trajectory = np.where(theta>min_angle)[0]+1
-    # theta_new = theta[idx_simple_trajectory]
-    # idx_simple_trajectory = np.where(theta_new<max_angle)[0]+1
+
+    idx_filtered = []
+    for index in idx_simple_trajectory:
+        if index+1 < len(is_bounce):
+            if is_bounce[index] == True:
+                idx_filtered.append(index)
 
     # Return real indices of bouncing points
-    ix = find_indices(points, list(zip(sx, sy)), idx_simple_trajectory)
+    ix = find_indices(points, list(zip(sx, sy)), idx_filtered)
 
     # Filter redundant points via clustering
     ix = eliminate_redundant_points(x, y, sx, sy, ix)
-    # print(ix)
     
     plot_bounces(x, y, sx, sy, ix)
 
