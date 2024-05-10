@@ -92,27 +92,12 @@ def rdp_algo(x, y, args):
     """Finds indices of bounces in the points list instead of the simplified trajectory."""
     def find_indices(points, sp, idx):
         ix = []
-
         for index in idx:
             ix.append(points.index(sp[index]))
-
         return ix
     
     """Finds angles between lines in the simplified trajectory."""
     def angle(dir, points):
-        """
-        Returns the angles between vectors.
-
-        Parameters:
-        dir is a 2D-array of shape (N,M) representing N vectors in M-dimensional space. (Tot directions in 2D space).
-
-        The return value is a 1D-array of values of shape (N-1,), with each value
-        between 0 and pi.
-
-        0 implies the vectors point in the same direction
-        pi/2 implies the vectors are orthogonal
-        pi implies the vectors point in opposite directions
-        """
         dir2 = dir[1:]
         dir1 = dir[:-1]
         radians = np.arccos(
@@ -173,7 +158,7 @@ def rdp_algo(x, y, args):
                         is_bounce.append(False)
                     else:
                         is_bounce.append(True)
-                # Correct
+                # Correct with < sign
                 elif v1_x_sign == 1 and v1_y_sign == -1 and v2_x_sign == -1 and v2_y_sign == 1: # First vector in fourth quadrant, second vector in second quadrant
                     if np.abs(ang1) < np.abs(ang2):
                         is_bounce.append(False)
@@ -183,17 +168,6 @@ def rdp_algo(x, y, args):
                     is_bounce.append(True)
 
             print("Pair: ", first, second, "Bounce: ", bounce, ", Pair number: ", i)
-            #is_bounce.append(bounce)
-
-            """
-            angle_rad = np.arctan2(np.linalg.norm(np.cross(first, second)), np.dot(first, second))
-            if first[1] < 0 and second[1] < 0:
-                is_bounce.append(False)
-                print("Vector pair: ", first, second, False)
-            else:
-                print("Vector pair: ", first, second, not (angle_rad < np.pi /2))
-                is_bounce.append(not (angle_rad < np.pi /2))
-            """
             
         return degrees, is_bounce
 
@@ -251,7 +225,7 @@ def rdp_algo(x, y, args):
             return mps
 
         groups = cluster_by_time(ix, 1)
-        # groups = cluster_by_space(groups, x, y, 30)
+        #groups = cluster_by_space(groups, x, y, 15)
         new_indices = get_midpoint(groups)
 
         
@@ -275,8 +249,9 @@ def rdp_algo(x, y, args):
         ax.invert_yaxis()
         plt.legend(loc='best')
         plt.show()
-        
-    tolerance = 5 # a normal value is 70
+    
+    # A normal value is 5. Lowering the tolerance allows to see for more bounces, at the cost of increasing the effects of the noise.
+    tolerance = 5
     min_angle = 25 # min angle = np.pi*0.15 works fine
 
     points = list(zip(x.to_list(), y.to_list()))
@@ -354,15 +329,6 @@ def velocity_approach(x, y, args):
 
     draw_video(ix, args)
 
-# Height of net in the middle: 3 ft
-# Court height and width: 78 ft, 36 ft
-# A: 0, 0
-# B: 0, 36
-# C: 78, 0
-# D: 78, 36
-# E: net middle point
-
-# Find line at the infnity
 if __name__ == '__main__':
 
     # Parse input
