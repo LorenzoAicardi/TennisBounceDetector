@@ -92,37 +92,89 @@ def rdp_algo(x, y, args):
     """Finds indices of bounces in the points list instead of the simplified trajectory."""
     def find_indices(points, sp, idx):
         ix = []
-
         for index in idx:
             ix.append(points.index(sp[index]))
-
         return ix
     
     """Finds angles between lines in the simplified trajectory."""
-    def angle(dir):
-        """
-        Returns the angles between vectors.
-
-        Parameters:
-        dir is a 2D-array of shape (N,M) representing N vectors in M-dimensional space.
-
-        The return value is a 1D-array of values of shape (N-1,), with each value
-        between 0 and pi.
-
-        0 implies the vectors point in the same direction
-        pi/2 implies the vectors are orthogonal
-        pi implies the vectors point in opposite directions
-        """
+    def angle(dir, points):
         dir2 = dir[1:]
         dir1 = dir[:-1]
-        return np.arccos(
+        radians = np.arccos(
             (dir1*dir2).sum(axis=1)/(np.sqrt((dir1**2).sum(axis=1)*(dir2**2).sum(axis=1)))
                          )
 
+        degrees = np.degrees(radians)
+        
+        # Rebuild vectors for quandrant check
+        vectors = []
+        for i in range(len(points) - 2):
+            p1 = (points[i])
+            p2 = (points[i + 1])
+            p3 = (points[i + 2])
+
+            vector1 = np.array([p1[0] - p2[0], p1[1] - p2[1]])
+            vector2 = np.array([p3[0] - p2[0], p3[1] - p2[1]])
+
+            vectors.append((vector1, vector2))               
+
+        # Quadrant check
+        is_bounce = []
+        for i in range(0, len(vectors)):
+            # Vectors
+            first = np.array(vectors[i][0])
+            second = np.array(vectors[i][1])
+            # is_bounce.append(True)
+
+            v1_x_sign = 1 if first[0] > 0 else -1
+            v1_y_sign = 1 if first[1] > 0 else -1
+            v2_x_sign = 1 if second[0] > 0 else -1
+            v2_y_sign = 1 if second[1] > 0 else -1
+            
+            bounce = True
+            
+            # Valleys are parabola peaks because of inverted screen 
+            if (v1_y_sign == v2_y_sign and v1_y_sign == 1 and v1_x_sign != v2_x_sign):
+                is_bounce.append(False) 
+            elif (v1_y_sign == v2_y_sign and v1_y_sign == -1 and v1_x_sign != v2_x_sign):
+                is_bounce.append(True) 
+            else:
+                ang1 = np.arctan(first[1]/first[0])
+                ang2 = np.arctan(second[1]/second[0]) 
+                # Correct
+                if v1_x_sign == 1 and v1_y_sign == 1 and v2_x_sign == -1 and v2_y_sign == -1 : # First vector in first quadrant, second vector in third quadrant
+                    if ang2 < ang1:
+                        is_bounce.append(False)
+                    else:
+                        is_bounce.append(True)
+                elif v1_x_sign == -1 and v1_y_sign == 1 and v2_x_sign == 1 and v2_y_sign == -1: # First vector in second quadrant, second vector in fourth quadrant
+                    if np.abs(ang2) > np.abs(ang1):
+                        is_bounce.append(False)
+                    else:
+                        is_bounce.append(True)
+                # Correct
+                elif v1_x_sign == -1 and v1_y_sign == -1 and v2_x_sign == 1 and v2_y_sign == 1: # First vector in third quadrant, second vector in first quadrant
+                    if ang2 > ang1:
+                        is_bounce.append(False)
+                    else:
+                        is_bounce.append(True)
+                # Correct with < sign
+                elif v1_x_sign == 1 and v1_y_sign == -1 and v2_x_sign == -1 and v2_y_sign == 1: # First vector in fourth quadrant, second vector in second quadrant
+                    if np.abs(ang1) < np.abs(ang2):
+                        is_bounce.append(False)
+                    else:
+                        is_bounce.append(True)
+                else: # If both vectors on the same side then it is 99% a player hitting the ball
+                    is_bounce.append(True)
+
+            print("Pair: ", first, second, "Bounce: ", bounce, ", Pair number: ", i)
+            
+        return degrees, is_bounce
+
     """Eliminates groups of redundant points from indices, as not to draw too many crosses."""
-    """This is done by taking, among all the identified points, the middle one. Better approaces will be found."""
+    """This is done by taking the centroid of the cluster."""
     def eliminate_redundant_points(x, y, sx, sy, ix):
-        def cluster(data, maxgap):
+        def cluster_by_time(ix, maxgap):
             '''Arrange data into groups where successive elements
             differ by no more than *maxgap*
 
@@ -133,32 +185,36 @@ def rdp_algo(x, y, args):
                 [[1, 6, 9], [99, 100, 102, 105], [134, 139, 141]]
 
             '''
-            data.sort()
-            groups = [[data[0]]]
-            for x in data[1:]:
+            ix.sort()
+            groups = [[ix[0]]]
+            for x in ix[1:]:
                 if abs(x - groups[-1][-1]) <= maxgap:
                     groups[-1].append(x)
                 else:
                     groups.append([x])
+                    
+            
             return groups
         
-        def get_min(groups):
-            points = []
-            min = 100000
-            min_idx = -1
-
+        def cluster_by_space(groups, x, y, max_distance):
+            new_groups = []
             for group in groups:
-                
-                for idx in group:
-                    if y[idx] < min:
-                        min = y[idx]
-                        min_idx = idx
-                
-                min = 100000
-                points.append(min_idx)
-                min_idx = -1
+                points = []
+                new_group = [group[0]] # a new group that has as a first item the first element of the current group, which is an index
 
-            return points
+                for i in group: # all points in the current group
+                    points.append(np.array(x[i], y[i]))
+
+                for i in range(len(points)-1):
+                    gap = np.linalg.norm(points[i+1]-points[i]) # gap between 2 points in a group
+                    if gap > max_distance: # if over a certain threshold
+                        new_groups.append(new_group) # I need to create a new group 
+                        new_group = [group[i+1]] 
+                    else:
+                        new_group.append(group[i+1])
+                
+                new_groups.append(new_group)
+            return new_groups
         
         def get_midpoint(groups):
             mps = []
@@ -168,34 +224,21 @@ def rdp_algo(x, y, args):
             
             return mps
 
-        groups = cluster(ix, 1)
-        
+        groups = cluster_by_time(ix, 1)
+        #groups = cluster_by_space(groups, x, y, 15)
         new_indices = get_midpoint(groups)
-        # new_indices = get_min(groups)
 
-        # Remove points if the y axis before and after are lower (using < for convention)
-        """ buf = []
-        for j in range(len(new_indices)-1):
-            interest = new_indices[j]
-            prev_neigh = interest-1
-            next_neigh = interest+1
-            if (y[interest] <= y[prev_neigh]) and (y[interest] <= y[next_neigh]):
-                # print( "Found parabola peak: " + str(x[i]) + ", " + str(y[i]) )
-                # print("index: " + str(i))
-                buf.append(interest)
-        s = set(buf)        
-        result = [x for x in new_indices if x not in s] """
         
         return new_indices
-    
+
     """Plots bouncing points."""
     def plot_bounces(x, y, sx, sy, ix):
         fig = plt.figure()
         ax =fig.add_subplot(111)
 
-        ax.plot(x, y, 'b-', label='original path')
+        # ax.plot(x, y, 'b-', label='original path')
         ax.plot(sx, sy, 'g--', label='simplified path')
-        ax.plot(x[ix], y[ix], 'ro', markersize = 10, label='turning points')
+        ax.plot(x[ix], y[ix], 'ro', markersize = 10, label='bounces')
 
         # Displays indices from the normal trajectory
         i = 0
@@ -206,10 +249,11 @@ def rdp_algo(x, y, args):
         ax.invert_yaxis()
         plt.legend(loc='best')
         plt.show()
-        
-    tolerance = 5 # a normal value is 70
-    min_angle = np.pi*0.15 # min angle = np.pi*0.15 works fine
     
+    # A normal value is 5. Lowering the tolerance allows to see for more bounces, at the cost of increasing the effects of the noise.
+    tolerance = 5
+    min_angle = 25 # min angle = np.pi*0.15 works fine
+
     points = list(zip(x.to_list(), y.to_list()))
 
     # Use the Ramer-Douglas-Peucker algorithm to simplify the path
@@ -217,32 +261,38 @@ def rdp_algo(x, y, args):
     # Python implementation: https://github.com/sebleier/RDP/
     simplified = np.array(rdp.rdp(points, tolerance))
 
-    # print(len(simplified))
     sx, sy = simplified.T
-    # print(sx, sy)
 
     # compute the direction vectors on the simplified curve
     directions = np.diff(simplified, axis=0)
-    theta = angle(directions)
+    
+    # Determine the quadrants each vector lies in
+    # quadrants_directions = np.sign(directions)
+
+    # Check if the angle is predominantly in the first or fourth quadrant
+    theta, is_bounce = angle(directions, simplified)
     # Select the index of the points (in the simplified trajectory) with the greatest theta
     # Large theta is associated with greatest change in direction.
     idx_simple_trajectory = np.where(theta>min_angle)[0]+1
 
     print(idx_simple_trajectory)
+    idx_filtered = []
+    for index in idx_simple_trajectory:
+        if is_bounce[index-1] == True:
+            idx_filtered.append(index)
+    print(idx_filtered)
+
     # Return real indices of bouncing points
-    ix = find_indices(points, list(zip(sx, sy)), idx_simple_trajectory)
-    # ix = idx_simple_trajectory
-    # print(ix)
+    ix = find_indices(points, list(zip(sx, sy)), idx_filtered)
 
     # Filter redundant points via clustering
     ix = eliminate_redundant_points(x, y, sx, sy, ix)
-    # print(ix)
     
     plot_bounces(x, y, sx, sy, ix)
 
     draw_video(ix, args)
 
-"""Velocity based approach."""
+"""Velocity based approach. DO NOT USE."""
 def velocity_approach(x, y, args): 
 
     # Function to calculate velocity
@@ -264,33 +314,21 @@ def velocity_approach(x, y, args):
     # Detect abrupt changes (threshold for velocity change)
     threshold = 10  # Adjust as needed
     ix = np.where(np.abs(np.diff(velocity)) > threshold)[0]
-    print(ix)
 
-    # Plot trajectory
     plt.plot(x, y, '-o')
 
-    # Mark abrupt changes
     if ix.size > 0:
-        plt.plot(x[ix+1], y[ix+1], 'rx', markersize=10, label='Abrupt change')
+        plt.plot(x[ix+1], y[ix+1], 'rx', markersize=10, label='Bounces')
 
     plt.legend()
     plt.xlabel('X')
     plt.ylabel('Y')
-    plt.title('Trajectory with Abrupt Changes')
+    plt.title('Trajectory with bounces')
     plt.grid(True)
     plt.show()
 
     draw_video(ix, args)
 
-# Height of net in the middle: 3 ft
-# Court height and width: 78 ft, 36 ft
-# A: 0, 0
-# B: 0, 36
-# C: 78, 0
-# D: 78, 36
-# E: net middle point
-
-# Find line at the infnity
 if __name__ == '__main__':
 
     # Parse input
@@ -305,5 +343,5 @@ if __name__ == '__main__':
     # Detection methods
 
     # bounce_angle_wrapping(x, y, args)    
-    # rdp_algo(x, y, args)
-    velocity_approach(x, y, args)
+    rdp_algo(x, y, args)
+    # velocity_approach(x, y, args)
