@@ -10,6 +10,72 @@ import scipy.io
 import pathlib
 from pathlib import Path
 import rdp
+from scipy.interpolate import interp1d
+
+def find_intercept(arr1, arr2, x_arr, distance_threshold=10):
+    intercept = []
+    i, j = 0, 0
+
+    while i < len(arr1) and j < len(arr2):
+        if arr1[i] == arr2[j]:
+            intercept.append(arr1[i])
+            i += 1
+            j += 1
+        elif abs(arr1[i] - arr2[j]) == 1:
+            intercept.append(arr2[j])
+            i += 1
+            j += 1
+        elif arr1[i] < arr2[j]:
+            i += 1
+        else:
+            j += 1
+
+    final_intercept = []
+    for index in intercept:
+        final_intercept.append(index)
+        print("index:")
+        print(index)
+        idx_in_arr2 = arr2.index(index)
+        if idx_in_arr2 > 0 and idx_in_arr2 < len(arr2) - 1:
+            
+            idx_before = arr2[idx_in_arr2 - 1]
+            idx_after = arr2[idx_in_arr2 + 1]
+            print("index before:")
+            print(idx_before)
+            
+            print("index after:")
+            print(idx_after)
+        
+            x_value_before = x_arr[idx_before]
+            x_value_after = x_arr[idx_after]
+            x_value_intercept = x_arr[index]
+            if abs(x_value_intercept - x_value_before) > distance_threshold:
+                final_intercept.append(idx_before)
+            elif abs(x_value_after - x_value_intercept) > distance_threshold:
+                
+                final_intercept.append(idx_after)
+    final_list = list(set(final_intercept))
+    original_list= list(set(intercept))
+    return final_list, original_list
+
+"""Plots bouncing points."""
+def plot_bounces(x, y, sx, sy, ix):
+    fig = plt.figure()
+    ax =fig.add_subplot(111)
+
+    # ax.plot(x, y, 'b-', label='original path')
+    ax.plot(sx, sy, 'g--', label='simplified path')
+    ax.plot(x[ix], y[ix], 'ro', markersize = 10, label='bounces')
+
+    # Displays indices from the normal trajectory
+    i = 0
+    for x, y in zip(x[ix], y[ix]):
+        ax.text(x, y, str(ix[i]), color="black", fontsize=8)
+        i = i+1
+        
+    ax.invert_yaxis()
+    plt.legend(loc='best')
+    plt.show()
 
 """Helper function to draw crosses on each frame if a bounce is detected."""
 def draw_cross(frame, x, y, size=10, color=(255, 0, 0), thickness=2):
@@ -64,17 +130,23 @@ def draw_video(ix, args):
     video_capture.release()
     out.release()
 
+"""Plotting bounces"""
+def plot_bounces_4(x, y, ix, dt):
+    plt.plot(x[ix + 1], y[ix + 1], 'or')  # Plotting points where angle difference > 150
+    plt.plot(x, y)  
+    for i in range(len(ix)):
+        plt.text(x[ix[i] + 1], y[ix[i] + 1], str(dt[ix[i]]))
+    plt.show()
+
+"""Finds indices of bounces in the points list instead of the simplified trajectory."""
+def find_indices(points, sp, idx):
+    ix = []
+    for index in idx:
+        ix.append(points.index(sp[index]))
+    return ix
+
 """With simple angle checking"""
 def bounce_angle_wrapping(x, y, args):
-    
-    """Plotting bounces"""
-    def plot_bounces(x, y, ix, dt):
-        plt.plot(x[ix + 1], y[ix + 1], 'or')  # Plotting points where angle difference > 150
-        plt.plot(x, y)  
-        for i in range(len(ix)):
-            plt.text(x[ix[i] + 1], y[ix[i] + 1], str(dt[ix[i]]))
-        plt.show()
-
     t = np.degrees(np.arctan2(np.diff(y), np.diff(x))) # Calculate angle of each line
     dt = np.degrees(np.diff(t)) # Calculate angle between lines
     dt = (dt + 180) % 360 - 180  # Wrap angles to [-180, 180)
@@ -82,94 +154,90 @@ def bounce_angle_wrapping(x, y, args):
     # Find indices where angle difference > 150
     ix = np.where(np.abs(dt) > 150)[0]
 
-    plot_bounces(x, y, ix, dt)
+    plot_bounces_4(x, y, ix, dt)
 
     draw_video(ix, args)
 
-"""With Ramer-Douglas-Pecker algorithm"""
-def rdp_algo(x, y, args):
+def angle(dir, points):
 
-    """Finds indices of bounces in the points list instead of the simplified trajectory."""
-    def find_indices(points, sp, idx):
-        ix = []
-        for index in idx:
-            ix.append(points.index(sp[index]))
-        return ix
-    
     """Finds angles between lines in the simplified trajectory."""
-    def angle(dir, points):
-        dir2 = dir[1:]
-        dir1 = dir[:-1]
-        radians = np.arccos(
-            (dir1*dir2).sum(axis=1)/(np.sqrt((dir1**2).sum(axis=1)*(dir2**2).sum(axis=1)))
-                         )
 
-        degrees = np.degrees(radians)
+    dir2 = dir[1:]
+    dir1 = dir[:-1]
+    radians = np.arccos(
+    (dir1*dir2).sum(axis=1)/(np.sqrt((dir1**2).sum(axis=1)*(dir2**2).sum(axis=1))))
+
+    degrees = np.degrees(radians)
         
         # Rebuild vectors for quandrant check
-        vectors = []
-        for i in range(len(points) - 2):
-            p1 = (points[i])
-            p2 = (points[i + 1])
-            p3 = (points[i + 2])
+    vectors = []
+    for i in range(len(points) - 2):
+        p1 = (points[i])
+        p2 = (points[i + 1])
+        p3 = (points[i + 2])
 
-            vector1 = np.array([p1[0] - p2[0], p1[1] - p2[1]])
-            vector2 = np.array([p3[0] - p2[0], p3[1] - p2[1]])
+        vector1 = np.array([p1[0] - p2[0], p1[1] - p2[1]])
+        vector2 = np.array([p3[0] - p2[0], p3[1] - p2[1]])
 
-            vectors.append((vector1, vector2))               
+        vectors.append((vector1, vector2))               
 
-        # Quadrant check
-        is_bounce = []
-        for i in range(0, len(vectors)):
-            # Vectors
-            first = np.array(vectors[i][0])
-            second = np.array(vectors[i][1])
-            # is_bounce.append(True)
+    # Quadrant check
+    is_bounce = []
+    for i in range(0, len(vectors)):
+        # Vectors
+        first = np.array(vectors[i][0])
+        second = np.array(vectors[i][1])
+        # is_bounce.append(True)
 
-            v1_x_sign = 1 if first[0] > 0 else -1
-            v1_y_sign = 1 if first[1] > 0 else -1
-            v2_x_sign = 1 if second[0] > 0 else -1
-            v2_y_sign = 1 if second[1] > 0 else -1
+        v1_x_sign = 1 if first[0] > 0 else -1
+        v1_y_sign = 1 if first[1] > 0 else -1
+        v2_x_sign = 1 if second[0] > 0 else -1
+        v2_y_sign = 1 if second[1] > 0 else -1
             
-            bounce = True
+        bounce = True
             
-            # Valleys are parabola peaks because of inverted screen 
-            if (v1_y_sign == v2_y_sign and v1_y_sign == 1 and v1_x_sign != v2_x_sign):
-                is_bounce.append(False) 
-            elif (v1_y_sign == v2_y_sign and v1_y_sign == -1 and v1_x_sign != v2_x_sign):
-                is_bounce.append(True) 
-            else:
-                ang1 = np.arctan(first[1]/first[0])
-                ang2 = np.arctan(second[1]/second[0]) 
-                # Correct
-                if v1_x_sign == 1 and v1_y_sign == 1 and v2_x_sign == -1 and v2_y_sign == -1 : # First vector in first quadrant, second vector in third quadrant
-                    if ang2 < ang1:
-                        is_bounce.append(False)
-                    else:
-                        is_bounce.append(True)
-                elif v1_x_sign == -1 and v1_y_sign == 1 and v2_x_sign == 1 and v2_y_sign == -1: # First vector in second quadrant, second vector in fourth quadrant
-                    if np.abs(ang2) > np.abs(ang1):
-                        is_bounce.append(False)
-                    else:
-                        is_bounce.append(True)
-                # Correct
-                elif v1_x_sign == -1 and v1_y_sign == -1 and v2_x_sign == 1 and v2_y_sign == 1: # First vector in third quadrant, second vector in first quadrant
-                    if ang2 > ang1:
-                        is_bounce.append(False)
-                    else:
-                        is_bounce.append(True)
-                # Correct with < sign
-                elif v1_x_sign == 1 and v1_y_sign == -1 and v2_x_sign == -1 and v2_y_sign == 1: # First vector in fourth quadrant, second vector in second quadrant
-                    if np.abs(ang1) < np.abs(ang2):
-                        is_bounce.append(False)
-                    else:
-                        is_bounce.append(True)
-                else: # If both vectors on the same side then it is 99% a player hitting the ball
+        # Valleys are parabola peaks because of inverted screen 
+        if (v1_y_sign == v2_y_sign and v1_y_sign == 1 and v1_x_sign != v2_x_sign):
+            is_bounce.append(False) 
+        elif (v1_y_sign == v2_y_sign and v1_y_sign == -1 and v1_x_sign != v2_x_sign):
+            is_bounce.append(True) 
+        else:
+            ang1 = np.arctan(first[1]/first[0])
+            ang2 = np.arctan(second[1]/second[0]) 
+            # Correct
+            if v1_x_sign == 1 and v1_y_sign == 1 and v2_x_sign == -1 and v2_y_sign == -1 : # First vector in first quadrant, second vector in third quadrant
+                if ang2 < ang1:
+                    is_bounce.append(False)
+                else:
                     is_bounce.append(True)
+            elif v1_x_sign == -1 and v1_y_sign == 1 and v2_x_sign == 1 and v2_y_sign == -1: # First vector in second quadrant, second vector in fourth quadrant
+                if np.abs(ang2) > np.abs(ang1):
+                    is_bounce.append(False)
+                else:
+                    is_bounce.append(True)
+            # Correct
+            elif v1_x_sign == -1 and v1_y_sign == -1 and v2_x_sign == 1 and v2_y_sign == 1: # First vector in third quadrant, second vector in first quadrant
+                if ang2 > ang1:
+                    is_bounce.append(False)
+                else:
+                    is_bounce.append(True)
+            # Correct with < sign
+            elif v1_x_sign == 1 and v1_y_sign == -1 and v2_x_sign == -1 and v2_y_sign == 1: # First vector in fourth quadrant, second vector in second quadrant
+                if np.abs(ang1) < np.abs(ang2):
+                    is_bounce.append(False)
+                else:
+                    is_bounce.append(True)
+            else: # If both vectors on the same side then it is 99% a player hitting the ball
+                is_bounce.append(True)
 
-            print("Pair: ", first, second, "Bounce: ", bounce, ", Pair number: ", i)
+        print("Pair: ", first, second, "Bounce: ", bounce, ", Pair number: ", i)
             
-        return degrees, is_bounce
+    return degrees, is_bounce
+
+def rdp_algo(x, y, args, tolerance=5):
+    """With Ramer-Douglas-Pecker algorithm"""
+
+    
 
     """Eliminates groups of redundant points from indices, as not to draw too many crosses."""
     """This is done by taking the centroid of the cluster."""
@@ -231,30 +299,13 @@ def rdp_algo(x, y, args):
         
         return new_indices
 
-    """Plots bouncing points."""
-    def plot_bounces(x, y, sx, sy, ix):
-        fig = plt.figure()
-        ax =fig.add_subplot(111)
-
-        # ax.plot(x, y, 'b-', label='original path')
-        ax.plot(sx, sy, 'g--', label='simplified path')
-        ax.plot(x[ix], y[ix], 'ro', markersize = 10, label='bounces')
-
-        # Displays indices from the normal trajectory
-        i = 0
-        for x, y in zip(x[ix], y[ix]):
-            ax.text(x, y, str(ix[i]), color="black", fontsize=8)
-            i = i+1
-        
-        ax.invert_yaxis()
-        plt.legend(loc='best')
-        plt.show()
+    
     
     # A normal value is 5. Lowering the tolerance allows to see for more bounces, at the cost of increasing the effects of the noise.
-    tolerance = 5
+    
     min_angle = 25 # min angle = np.pi*0.15 works fine
 
-    points = list(zip(x.to_list(), y.to_list()))
+    points = list(zip(x, y))
 
     # Use the Ramer-Douglas-Peucker algorithm to simplify the path
     # http://en.wikipedia.org/wiki/Ramer-Douglas-Peucker_algorithm
@@ -263,6 +314,8 @@ def rdp_algo(x, y, args):
 
     sx, sy = simplified.T
 
+    
+    
     # compute the direction vectors on the simplified curve
     directions = np.diff(simplified, axis=0)
     
@@ -275,12 +328,12 @@ def rdp_algo(x, y, args):
     # Large theta is associated with greatest change in direction.
     idx_simple_trajectory = np.where(theta>min_angle)[0]+1
 
-    print(idx_simple_trajectory)
+    #print(idx_simple_trajectory)
     idx_filtered = []
     for index in idx_simple_trajectory:
         if is_bounce[index-1] == True:
             idx_filtered.append(index)
-    print(idx_filtered)
+    #print(idx_filtered)
 
     # Return real indices of bouncing points
     ix = find_indices(points, list(zip(sx, sy)), idx_filtered)
@@ -288,9 +341,12 @@ def rdp_algo(x, y, args):
     # Filter redundant points via clustering
     ix = eliminate_redundant_points(x, y, sx, sy, ix)
     
-    plot_bounces(x, y, sx, sy, ix)
+    #plot_bounces(x, y, sx, sy, ix)
+    
+    
 
-    draw_video(ix, args)
+    #draw_video(ix, args)
+    return x,y, ix, sx, sy
 
 """Velocity based approach. DO NOT USE."""
 def velocity_approach(x, y, args): 
@@ -339,9 +395,29 @@ if __name__ == '__main__':
     df = pd.read_csv(args.path_to_csv, usecols=columns)
     x = df.x
     y = df.y
+    
+    threshold = 0.5
 
-    # Detection methods
+    dx = np.diff(x)
+    dy = np.diff(y)
+    
+    # Find indices where differences exceed the threshold
+    outlier_indices = np.where((np.abs(dx) > threshold) | (np.abs(dy) > threshold))[0]
 
-    # bounce_angle_wrapping(x, y, args)    
-    rdp_algo(x, y, args)
-    # velocity_approach(x, y, args)
+    # Interpolate to smooth out the trajectory around outliers
+    smoothed_x = x.copy()
+    smoothed_y = y.copy()
+    for out in outlier_indices:
+        smoothed_x[out] = (smoothed_x[out - 1] + smoothed_x[out + 1]) / 2
+        smoothed_y[out] = (smoothed_y[out - 1] + smoothed_y[out + 1]) / 2
+      
+    #rdp_algo(smoothed_x, smoothed_y, args)
+    x_5, y_y, ix_5, sx_5, sy_5=rdp_algo(x, y, args, tolerance=5)
+    x_3, y_3, ix_3, sx_3, sy_3=rdp_algo(x, y, args, tolerance=3)
+    print(ix_5)
+    print(ix_3)
+    final_intercept, original_intercept = find_intercept(ix_5, ix_3, x)
+    print(final_intercept)
+    print(original_intercept)
+    plot_bounces(x, y, sx_3, sy_3, final_intercept)
+    #velocity_approach(x, y, args)
