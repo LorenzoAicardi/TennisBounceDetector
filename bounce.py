@@ -10,7 +10,7 @@ import scipy.io
 import pathlib
 from pathlib import Path
 import rdp
-from scipy.interpolate import interp1d
+from scipy.interpolate import splprep, splev
 
 def find_intercept(arr1, arr2, x_arr, distance_threshold=10):
     intercept = []
@@ -161,15 +161,7 @@ def bounce_angle_wrapping(x, y, args):
 def angle(dir, points):
 
     """Finds angles between lines in the simplified trajectory."""
-
-    dir2 = dir[1:]
-    dir1 = dir[:-1]
-    radians = np.arccos(
-    (dir1*dir2).sum(axis=1)/(np.sqrt((dir1**2).sum(axis=1)*(dir2**2).sum(axis=1))))
-
-    degrees = np.degrees(radians)
-        
-        # Rebuild vectors for quandrant check
+    # Vectors for quandrant check
     vectors = []
     for i in range(len(points) - 2):
         p1 = (points[i])
@@ -179,7 +171,27 @@ def angle(dir, points):
         vector1 = np.array([p1[0] - p2[0], p1[1] - p2[1]])
         vector2 = np.array([p3[0] - p2[0], p3[1] - p2[1]])
 
-        vectors.append((vector1, vector2))               
+        vectors.append((vector1, vector2))
+    """
+    degrees = []
+    for couple in vectors:
+        first = couple[0]
+        second = couple[1]
+
+        dot = np.dot(first, second)
+        ang = np.degrees(np.arccos(dot/(np.linalg.norm(first)*np.linalg.norm(second))))
+        degrees.append(ang)
+
+    degrees = np.array(degrees)
+    """
+
+    dir2 = dir[1:]
+    dir1 = dir[:-1]
+    radians = np.arccos(
+    (dir1*dir2).sum(axis=1)/(np.sqrt((dir1**2).sum(axis=1)*(dir2**2).sum(axis=1))))
+
+    degrees = np.degrees(radians)
+    
 
     # Quadrant check
     is_bounce = []
@@ -198,7 +210,11 @@ def angle(dir, points):
             
         # Valleys are parabola peaks because of inverted screen 
         if (v1_y_sign == v2_y_sign and v1_y_sign == 1 and v1_x_sign != v2_x_sign):
-            is_bounce.append(False) 
+            delta_theta = np.degrees(np.arccos(np.dot(vectors[i][0], vectors[i][1])/(np.linalg.norm(vectors[i][0])*np.linalg.norm(vectors[i][1]))))
+            if np.abs(delta_theta) < 100 and np.abs(delta_theta) > 20:
+                is_bounce.append(True)
+            else:
+                is_bounce.append(False)
         elif (v1_y_sign == v2_y_sign and v1_y_sign == -1 and v1_x_sign != v2_x_sign):
             is_bounce.append(True) 
         else:
@@ -211,7 +227,7 @@ def angle(dir, points):
                 else:
                     is_bounce.append(True)
             elif v1_x_sign == -1 and v1_y_sign == 1 and v2_x_sign == 1 and v2_y_sign == -1: # First vector in second quadrant, second vector in fourth quadrant
-                if np.abs(ang2) > np.abs(ang1):
+                if np.abs(ang2) < np.abs(ang1):
                     is_bounce.append(False)
                 else:
                     is_bounce.append(True)
@@ -236,8 +252,6 @@ def angle(dir, points):
 
 def rdp_algo(x, y, args, tolerance=5):
     """With Ramer-Douglas-Pecker algorithm"""
-
-    
 
     """Eliminates groups of redundant points from indices, as not to draw too many crosses."""
     """This is done by taking the centroid of the cluster."""
@@ -299,10 +313,6 @@ def rdp_algo(x, y, args, tolerance=5):
         
         return new_indices
 
-    
-    
-    # A normal value is 5. Lowering the tolerance allows to see for more bounces, at the cost of increasing the effects of the noise.
-    
     min_angle = 25 # min angle = np.pi*0.15 works fine
 
     points = list(zip(x, y))
@@ -312,9 +322,7 @@ def rdp_algo(x, y, args, tolerance=5):
     # Python implementation: https://github.com/sebleier/RDP/
     simplified = np.array(rdp.rdp(points, tolerance))
 
-    sx, sy = simplified.T
-
-    
+    sx, sy = simplified.T    
     
     # compute the direction vectors on the simplified curve
     directions = np.diff(simplified, axis=0)
@@ -328,12 +336,10 @@ def rdp_algo(x, y, args, tolerance=5):
     # Large theta is associated with greatest change in direction.
     idx_simple_trajectory = np.where(theta>min_angle)[0]+1
 
-    #print(idx_simple_trajectory)
     idx_filtered = []
     for index in idx_simple_trajectory:
         if is_bounce[index-1] == True:
             idx_filtered.append(index)
-    #print(idx_filtered)
 
     # Return real indices of bouncing points
     ix = find_indices(points, list(zip(sx, sy)), idx_filtered)
@@ -341,11 +347,6 @@ def rdp_algo(x, y, args, tolerance=5):
     # Filter redundant points via clustering
     ix = eliminate_redundant_points(x, y, sx, sy, ix)
     
-    #plot_bounces(x, y, sx, sy, ix)
-    
-    
-
-    #draw_video(ix, args)
     return x,y, ix, sx, sy
 
 """Velocity based approach. DO NOT USE."""
@@ -393,9 +394,30 @@ if __name__ == '__main__':
     # Obtain coordinates from csv
     columns = ['x', 'y']
     df = pd.read_csv(args.path_to_csv, usecols=columns)
+
+    """
+    # Correcting trajectory
+    x = df.iloc[105:160, [0]].values.flatten()
+    y = df.iloc[105:160, [1]].values.flatten()
+    for i in range(len(x)-1):
+        if x[i] == x[i+1]:
+            x[i+1] += 1e-5
+        if y[i] == y[i+1]:
+            y[i+1] += 1e-5
+
+    tck, u = splprep([np.array(x), np.array(y)], s=200)
+    new_points = splev(np.linspace(0, 1, 160-105), tck)
+    """
     x = df.x
     y = df.y
-    
+    """
+    print(len(new_points[0]))
+    for j in range(len(new_points)):
+        x[j+105] = new_points[0][j]
+        y[j+105] = new_points[1][j]
+        
+        #print(x[i], y[i])
+    """
     threshold = 0.5
 
     dx = np.diff(x)
@@ -405,19 +427,21 @@ if __name__ == '__main__':
     outlier_indices = np.where((np.abs(dx) > threshold) | (np.abs(dy) > threshold))[0]
 
     # Interpolate to smooth out the trajectory around outliers
+    """
     smoothed_x = x.copy()
     smoothed_y = y.copy()
     for out in outlier_indices:
         smoothed_x[out] = (smoothed_x[out - 1] + smoothed_x[out + 1]) / 2
         smoothed_y[out] = (smoothed_y[out - 1] + smoothed_y[out + 1]) / 2
-      
+    """  
     #rdp_algo(smoothed_x, smoothed_y, args)
-    x_5, y_y, ix_5, sx_5, sy_5=rdp_algo(x, y, args, tolerance=5)
-    x_3, y_3, ix_3, sx_3, sy_3=rdp_algo(x, y, args, tolerance=3)
-    print(ix_5)
-    print(ix_3)
-    final_intercept, original_intercept = find_intercept(ix_5, ix_3, x)
-    print(final_intercept)
-    print(original_intercept)
-    plot_bounces(x, y, sx_3, sy_3, final_intercept)
-    #velocity_approach(x, y, args)
+    x_5, y_5, ix_5, sx_5, sy_5=rdp_algo(x, y, args, tolerance=15)
+    # x_3, y_3, ix_3, sx_3, sy_3=rdp_algo(x, y, args, tolerance=7)
+    #print(ix_5)
+    #print(ix_3)
+    #final_intercept, original_intercept = find_intercept(ix_5, ix_3, x)
+    #print(final_intercept)
+    #print(original_intercept)
+    plot_bounces(x, y, sx_5, sy_5, ix_5)
+    
+    draw_video(ix_5, args)

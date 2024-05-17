@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt 
 import pandas as pd
 import argparse
+import numpy as np
+from scipy.interpolate import splprep, splev
 
 def view_3d():
     columns = ['timestamp', 'x', 'y']
@@ -18,18 +20,33 @@ def view_3d():
 
 def view_2d(args):
     columns = ['x', 'y']
-    df = pd.read_csv(args.path_to_csv, usecols=columns)
-
     fig = plt.figure(figsize=(10, 10))
     ax = fig.add_subplot(111)
+    #x = df.x
+    #y = df.y
+    
+    df = pd.read_csv(args.path_to_csv, usecols=columns)
+    x = df.iloc[105:160, [0]].values.flatten()
+    y = df.iloc[105:160, [1]].values.flatten()
+    for i in range(len(x)-1):
+        if x[i] == x[i+1]:
+            x[i+1] += 1e-5
+        if y[i] == y[i+1]:
+            y[i+1] += 1e-5
 
-    ax.scatter(df.x, df.y)
-    for i in range(len(df.x)):
-        plt.plot(df.x[i:i+2], df.y[i:i+2], 'ro-')
+    tck, u = splprep([np.array(x), np.array(y)], s=0)
+    new_points = splev(np.linspace(0, 1, 160-105), tck)
+
+    #print(len(new_points))
+    x = new_points[0]
+    y = new_points[1]
+
+    ax.scatter(x, y)
+    for i in range(len(x)):
+        plt.plot(x[i:i+2], y[i:i+2], 'ro-')
 
     ax.set_xlabel('x')
     ax.set_ylabel('y')
-    # plt.plot(df.x, df.y)
     ax.invert_yaxis()
     plt.show()
 
