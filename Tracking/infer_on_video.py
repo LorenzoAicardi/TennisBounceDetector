@@ -235,7 +235,7 @@ if __name__ == '__main__':
     
     df = pd.DataFrame(ball_track, columns=['x', 'y'])
 
-    df.to_csv('C:/Users/loren/Desktop/TennisBounceDetector/outcsv/g3c3.csv', index=False)
+    df.to_csv('C:/Users/loren/Desktop/TennisBounceDetector/outcsv/g6c4.csv', index=False)
     
     #name = os.path.splitext(os.path.split(args.video_path)[1])[0]
     #df.to_csv('outcsv/' + name + '.csv')

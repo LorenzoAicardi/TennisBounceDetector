@@ -210,11 +210,14 @@ def angle(dir, points):
             
         # Valleys are parabola peaks because of inverted screen 
         if (v1_y_sign == v2_y_sign and v1_y_sign == 1 and v1_x_sign != v2_x_sign):
-            delta_theta = np.degrees(np.arccos(np.dot(vectors[i][0], vectors[i][1])/(np.linalg.norm(vectors[i][0])*np.linalg.norm(vectors[i][1]))))
-            if np.abs(delta_theta) < 100 and np.abs(delta_theta) > 20:
+            delta_theta = np.degrees(np.arccos(np.dot(first, second)/(np.linalg.norm(first)*np.linalg.norm(second))))
+            print(delta_theta)
+            if np.abs(delta_theta) < 95 and np.abs(delta_theta) > 20 and (np.linalg.norm(first) > 100 or np.linalg.norm(second) > 100):
                 is_bounce.append(True)
+                print("True")
             else:
                 is_bounce.append(False)
+                print("False")
         elif (v1_y_sign == v2_y_sign and v1_y_sign == -1 and v1_x_sign != v2_x_sign):
             is_bounce.append(True) 
         else:
@@ -313,7 +316,7 @@ def rdp_algo(x, y, args, tolerance=5):
         
         return new_indices
 
-    min_angle = 25 # min angle = np.pi*0.15 works fine
+    min_angle = 25 # min angle = 25 works fine, the smallest it is the better
 
     points = list(zip(x, y))
 
@@ -435,7 +438,7 @@ if __name__ == '__main__':
         smoothed_y[out] = (smoothed_y[out - 1] + smoothed_y[out + 1]) / 2
     """  
     #rdp_algo(smoothed_x, smoothed_y, args)
-    x_5, y_5, ix_5, sx_5, sy_5=rdp_algo(x, y, args, tolerance=15)
+    x_5, y_5, ix_5, sx_5, sy_5=rdp_algo(x, y, args, tolerance=15) # tolerance = 15 seems a good compromise, the lower the better
     # x_3, y_3, ix_3, sx_3, sy_3=rdp_algo(x, y, args, tolerance=7)
     #print(ix_5)
     #print(ix_3)
