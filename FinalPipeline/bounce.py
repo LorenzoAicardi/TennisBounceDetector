@@ -11,6 +11,8 @@ import pathlib
 from pathlib import Path
 import rdp
 from scipy.interpolate import splprep, splev
+import plotly.graph_objects as go
+import plotly.offline as pyo
 
 def find_intercept(arr1, arr2, x_arr, distance_threshold=10):
     intercept = []
@@ -92,50 +94,12 @@ def parse():
     parser.add_argument('--path_to_output_video', type=str, help='path to save the video with marked bounces')
     return parser.parse_args()
 
-# """Drawing on video."""
-# def draw_video(ix, path='FinalPipeline/vout/output.mp4'):
-#     if os.path.exists(path):
-#         video_capture = cv2.VideoCapture(path)
-#     else:
-#         print("The specified file does not exist.")
-
-#     # Video properties
-#     fps = int(video_capture.get(cv2.CAP_PROP_FPS))
-#     width = int(video_capture.get(cv2.CAP_PROP_FRAME_WIDTH))
-#     height = int(video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-#     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-#     out = cv2.VideoWriter(path, fourcc, fps, (width, height))
-
-#     # Variables for storing frames where a bounce is detected
-#     i = 0
-#     visited = []
-#     while True:
-#         ret, frame = video_capture.read()
-
-#         if not ret:
-#             break
-
-#         # If at that frame a bounce is detected, mark the bounce as visited
-#         if i in ix:
-#             visited.append(i)
-
-#         # Draw crosses at the specified (x, y) positions every frame onwards from bounce detection
-#         for item in visited:
-#             draw_cross(frame, x[item], y[item])
-
-#         out.write(frame)
-#         i = i+1
-
-#     video_capture.release()
-#     out.release()
-
-def draw_video(ix,x,y, input_path='FinalPipeline/vout/output.mp4', output_path='FinalPipeline/vout/output_bounces.mp4'):
-    if not os.path.exists(input_path):
+"""Drawing on video."""
+def draw_video(ix,x,y, path_to_video, path_to_output_video):
+    if os.path.exists(path_to_video):
+        video_capture = cv2.VideoCapture(path_to_video)
+    else:
         print("The specified file does not exist.")
-        return
-
-    video_capture = cv2.VideoCapture(input_path)
 
     # Video properties
     fps = int(video_capture.get(cv2.CAP_PROP_FPS))
@@ -143,7 +107,7 @@ def draw_video(ix,x,y, input_path='FinalPipeline/vout/output.mp4', output_path='
     height = int(video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+    out = cv2.VideoWriter(path_to_output_video, fourcc, fps, (width, height))
 
     # Variables for storing frames where a bounce is detected
     i = 0
@@ -163,7 +127,7 @@ def draw_video(ix,x,y, input_path='FinalPipeline/vout/output.mp4', output_path='
             draw_cross(frame, x[item], y[item])
 
         out.write(frame)
-        i += 1
+        i = i+1
 
     video_capture.release()
     out.release()
@@ -194,7 +158,7 @@ def bounce_angle_wrapping(x, y, args):
 
     plot_bounces_4(x, y, ix, dt)
 
-    draw_video(ix)
+    draw_video(ix, args)
 
 def angle(dir, points):
 
@@ -250,7 +214,7 @@ def angle(dir, points):
         if (v1_y_sign == v2_y_sign and v1_y_sign == 1 and v1_x_sign != v2_x_sign):
             delta_theta = np.degrees(np.arccos(np.dot(first, second)/(np.linalg.norm(first)*np.linalg.norm(second))))
             print(delta_theta)
-            if np.abs(delta_theta) < 95 and np.abs(delta_theta) > 20 and (np.linalg.norm(first) > 100 or np.linalg.norm(second) > 100):
+            if np.abs(delta_theta) < 95 and np.abs(delta_theta) > 20 and (np.linalg.norm(first) > 70 or np.linalg.norm(second) > 70):
                 is_bounce.append(True)
                 print("True")
             else:
@@ -291,7 +255,7 @@ def angle(dir, points):
             
     return degrees, is_bounce
 
-def rdp_algo(x, y,  tolerance=5):
+def rdp_algo(x, y, tolerance=5):
     """With Ramer-Douglas-Pecker algorithm"""
 
     """Eliminates groups of redundant points from indices, as not to draw too many crosses."""
@@ -367,12 +331,10 @@ def rdp_algo(x, y,  tolerance=5):
     
     # compute the direction vectors on the simplified curve
     directions = np.diff(simplified, axis=0)
-    
-    # Determine the quadrants each vector lies in
-    # quadrants_directions = np.sign(directions)
 
-    # Check if the angle is predominantly in the first or fourth quadrant
+    # Check if the angle is predominantly in the first or fourth quadrant, and if each angle corresponds to a bounce
     theta, is_bounce = angle(directions, simplified)
+
     # Select the index of the points (in the simplified trajectory) with the greatest theta
     # Large theta is associated with greatest change in direction.
     idx_simple_trajectory = np.where(theta>min_angle)[0]+1
@@ -425,9 +387,30 @@ def velocity_approach(x, y, args):
     plt.grid(True)
     plt.show()
 
-    draw_video(ix)
+    draw_video(ix, args)
+def plot_bounces_plotly(x, y, sx, sy, ix):
+    fig = go.Figure()
+
+    # Add the simplified path as a dashed green line
+    fig.add_trace(go.Scatter(x=sx, y=sy, mode='lines', line=dict(color='green', dash='dash'), name='simplified path'))
+
+    # Add the bounces as red markers
+    fig.add_trace(go.Scatter(x=[x[i] for i in ix], y=[y[i] for i in ix], mode='markers', marker=dict(color='red', size=10), name='bounces'))
+
+    # Add text annotations for each bounce
+    for i, idx in enumerate(ix):
+        fig.add_annotation(x=x[idx], y=y[idx], text=str(idx), showarrow=True, arrowhead=2, ax=0, ay=-10, font=dict(size=8, color='black'))
+
+    # Invert the y-axis
+    fig.update_layout(yaxis=dict(autorange='reversed'))
+
+    # Add legend
+    fig.update_layout(legend=dict(x=0, y=1, traceorder='normal'))
+
+    # Show the plot
+    fig.show()
     
-def detect_bounces(trajectory, out_path):
+def detect_bounces(trajectory, out_path, path_to_video, path_to_output_video):
     x = trajectory.x
     y = trajectory.y
     threshold = 0.5
@@ -441,8 +424,8 @@ def detect_bounces(trajectory, out_path):
     bounce_df = pd.DataFrame({'x': x, 'y': y, 'bounce': [1 if i in ix_5 else 0 for i in range(len(x))]})
     bounce_df.to_csv(out_path, index=False)
     
-    #plot_bounces(x, y, sx_5, sy_5, ix_5)
-    draw_video(ix_5,x,y)
+    plot_bounces_plotly(x, y, sx_5, sy_5, ix_5)
+    draw_video(ix_5,x,y, path_to_video, path_to_output_video)
     return bounce_df, ix_5, x, y
 
 if __name__ == '__main__':

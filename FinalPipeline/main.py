@@ -65,22 +65,23 @@ def intersect_line_plane(p0, p1, p_co, p_no, epsilon=1e-6):
 
 
 if __name__ == '__main__':
+    if os.path.exists('FinalPipeline/csvout/output.csv'):
+        trajectory = pd.read_csv('FinalPipeline/csvout/output.csv')
+    else:
+        tracker = BallTracker(model_path='FinalPipeline/Tracking/models/tracknet.pt', extrapolation=True)
     
-    
-    # tracker = BallTracker(model_path='FinalPipeline/Tracking/models/tracknet.pt', extrapolation=True)
-    
-    # trajectory=tracker.track_ball('FinalPipeline/vin/input.mp4', 'FinalPipeline/vout/output.mp4', 'FinalPipeline/csvout/output.csv')
-    # #print(trajectory)
-    # bounces, ix_5, x,y = detect_bounces(trajectory, 'FinalPipeline/csvout/bounces.csv')
-    # #print(bounces)
-    # processor= TennisVideoProcessor('FinalPipeline/vin/input.mp4', 'FinalPipeline/vout/output_map.mp4', coordsfile='FinalPipeline/csvout/bounces.csv')
-    # # if csvout boxes do not exist, detect players
-    # if processor.player_1_boxes is None or processor.player_2_boxes is None:
-    #     processor.detect_players()
-    # # draw minimap on current output video
-    # processor.track_court()
-    # processor.draw_court_and_players(input_video_path='FinalPipeline/vout/output_bounces.mp4')
-    # processor.draw_minimap(input_video_path='FinalPipeline/vout/court_and_players.mp4')
+        trajectory=tracker.track_ball('FinalPipeline/vin/input.mp4', 'FinalPipeline/vout/output.mp4', 'FinalPipeline/csvout/output.csv')
+        print(trajectory)
+    bounces, ix_5, x,y = detect_bounces(trajectory, 'FinalPipeline/csvout/bounces.csv', path_to_video='FinalPipeline/vout/output.mp4', path_to_output_video='FinalPipeline/vout/output_bounces.mp4')
+    #print(bounces)
+    processor= TennisVideoProcessor('FinalPipeline/vin/input.mp4', 'FinalPipeline/vout/output_map.mp4', coordsfile='FinalPipeline/csvout/bounces.csv')
+    # if csvout boxes do not exist, detect players
+    if processor.player_1_boxes is None or processor.player_2_boxes is None:
+        processor.detect_players()
+    # draw minimap on current output video
+    processor.track_court()
+    processor.draw_court_and_players(input_video_path='FinalPipeline/vout/output_bounces.mp4')
+    processor.draw_minimap(input_video_path='FinalPipeline/vout/court_and_players.mp4')
     
     # calibrate camera
     ground_points = np.array([
