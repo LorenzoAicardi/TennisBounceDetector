@@ -246,13 +246,13 @@ if __name__ == '__main__':
     
     # scatter intersections p1
     intersections_p1 = np.array(intersectios_p1)
-    fig.add_trace(go.Scatter3d(x=intersections_p1[:, 0], y=intersections_p1[:, 1], z=intersections_p1[:, 2], mode='markers', name='Intersections P1', marker=dict(color='red', size=2)))
+    fig.add_trace(go.Scatter3d(x=intersections_p1[:, 0], y=intersections_p1[:, 1], z=intersections_p1[:, 2], mode='markers', name='Intersections P1', marker=dict(color='red', size=3)))
     #scatter intersections p2
     intersections_p2 = np.array(intersections_p2)
-    fig.add_trace(go.Scatter3d(x=intersections_p2[:, 0], y=intersections_p2[:, 1], z=intersections_p2[:, 2], mode='markers', name='Intersections P2', marker=dict(color='blue', size=2)))  
+    fig.add_trace(go.Scatter3d(x=intersections_p2[:, 0], y=intersections_p2[:, 1], z=intersections_p2[:, 2], mode='markers', name='Intersections P2', marker=dict(color='blue', size=3)))  
     # scatter ground 
     ground_p = np.array(ground_p)
-    fig.add_trace(go.Scatter3d(x=ground_p[:, 0], y=ground_p[:, 1], z=ground_p[:, 2], mode='markers', name='Ground P1', marker=dict(color='green', size=2)))
+    fig.add_trace(go.Scatter3d(x=ground_p[:, 0], y=ground_p[:, 1], z=ground_p[:, 2], mode='markers', name='Ground P1', marker=dict(color='orange', size=3)))
 
     # tennis court
     court = np.array([[91,2377,0], [1188,2377,0], [1188,0,0],[91,0,0]])
