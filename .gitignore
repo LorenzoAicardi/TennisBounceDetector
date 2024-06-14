@@ -1,7 +1,3 @@
-videoin/*
-videoout/*
-models/yoloV5_2k.pt
-outcsv/*
-g31cpredict.mp4
-output_video.mp4
-otherattempts.py
+./FinalPipeline/vout/*.mp4
+./FinalPipeline/__pycache__/
+__pycache__
