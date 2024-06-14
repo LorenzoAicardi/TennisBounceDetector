@@ -195,6 +195,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_path', type=str, help='path to model')
     parser.add_argument('--video_path', type=str, help='path to input video')
     parser.add_argument('--video_out_path', type=str, help='path to output video')
+    #parser.add_argument('--csv-path', type=str, help='path to csv')
     parser.add_argument('--extrapolation', action='store_true', help='whether to use ball track extrapolation')
     
     parser.add_argument('--video_name', type=str, help='video name')
@@ -229,10 +230,8 @@ if __name__ == '__main__':
             ball_track[r[0]:r[1]] = ball_subtrack
         
     indices=write_track(frames, ball_track, args.video_out_path, fps)
-    # print(indices)
-    # print(ball_track)
-    # transform ball track in a dataframe
-    
+
+    # transform ball track in a dataframe    
     df = pd.DataFrame(ball_track, columns=['x', 'y'])
 
     df.to_csv('C:/Users/loren/Desktop/TennisBounceDetector/outcsv/g6c4.csv', index=False)

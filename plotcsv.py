@@ -56,5 +56,33 @@ if __name__ == '__main__':
     parser.add_argument('--path_to_csv', type=str, help='path to csv')
     args = parser.parse_args()
 
+    columns = ['x', 'y']
+    df = pd.read_csv(args.path_to_csv, usecols=columns)
+    x = df.x
+    y = df.y
+
+    window_length = 4
+    polyorder = 3
+    smoothed_x = savgol_filter(x, window_length, polyorder)
+    smoothed_y = savgol_filter(y, window_length, polyorder)
+    
+    # Combine smoothed x and y coordinates into smoothed trajectory
+    smoothed_trajectory = np.column_stack((smoothed_x, smoothed_y))
+    print(smoothed_x)
+    
+    fig = plt.figure(figsize=(10, 10))
+    ax = fig.add_subplot(111)
+
+    ax.scatter(smoothed_x, smoothed_y)
+    for i in range(len(df.x)):
+        plt.plot(smoothed_x[i:i+2], smoothed_y[i:i+2], 'ro-')
+
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    # plt.plot(df.x, df.y)
+    ax.invert_yaxis()
+    plt.show()
+    
     # view_3d(args)
-    view_2d(args)
+    # view_2d(args)
+

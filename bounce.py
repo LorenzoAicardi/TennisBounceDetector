@@ -212,7 +212,7 @@ def angle(dir, points):
         if (v1_y_sign == v2_y_sign and v1_y_sign == 1 and v1_x_sign != v2_x_sign):
             delta_theta = np.degrees(np.arccos(np.dot(first, second)/(np.linalg.norm(first)*np.linalg.norm(second))))
             print(delta_theta)
-            if np.abs(delta_theta) < 95 and np.abs(delta_theta) > 20 and (np.linalg.norm(first) > 100 or np.linalg.norm(second) > 100):
+            if np.abs(delta_theta) < 95 and np.abs(delta_theta) > 20 and (np.linalg.norm(first) > 70 or np.linalg.norm(second) > 70):
                 is_bounce.append(True)
                 print("True")
             else:
@@ -329,12 +329,10 @@ def rdp_algo(x, y, args, tolerance=5):
     
     # compute the direction vectors on the simplified curve
     directions = np.diff(simplified, axis=0)
-    
-    # Determine the quadrants each vector lies in
-    # quadrants_directions = np.sign(directions)
 
-    # Check if the angle is predominantly in the first or fourth quadrant
+    # Check if the angle is predominantly in the first or fourth quadrant, and if each angle corresponds to a bounce
     theta, is_bounce = angle(directions, simplified)
+
     # Select the index of the points (in the simplified trajectory) with the greatest theta
     # Large theta is associated with greatest change in direction.
     idx_simple_trajectory = np.where(theta>min_angle)[0]+1
@@ -388,6 +386,7 @@ def velocity_approach(x, y, args):
     plt.show()
 
     draw_video(ix, args)
+
 
 if __name__ == '__main__':
 
