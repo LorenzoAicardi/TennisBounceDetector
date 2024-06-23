@@ -11,6 +11,7 @@ import torch
 import sys
 import time
 
+
 from sktime.datatypes._panel._convert import from_2d_array_to_nested
 from court_detector import CourtDetector
 from utils import get_video_properties, get_dtype
@@ -44,8 +45,10 @@ class TennisVideoProcessor:
 
         self.fps, self.length, self.v_width, self.v_height = get_video_properties(self.video)
         self.coords = pd.read_csv(self.coordsfile)
+        self.lines= None
         self.frames = []
         self._load_player_boxes()
+       
 
     def _load_player_boxes(self):
         if os.path.exists('FinalPipeline/csvout/player1_boxes.csv') and os.path.exists('FinalPipeline/csvout/player2_boxes.csv'):
@@ -57,13 +60,16 @@ class TennisVideoProcessor:
         else:
             self.player_1_boxes = None
             self.player_2_boxes = None
+    
+        
 
     def detect_players(self):
         frame_i = 0
-        
+        lines_arr = []
         while True:
             ret, frame = self.video.read()
             frame_i += 1
+            print(frame_i)
 
             if not ret:
                 break
@@ -73,7 +79,8 @@ class TennisVideoProcessor:
                 lines = self.court_detector.detect(frame)
             else:
                 lines = self.court_detector.track_court(frame)
-
+            lines_arr.append(lines)
+            
             if self.player_1_boxes is None or self.player_2_boxes is None:
                 # Perform player detection if boxes are not available
                 self.detection_model.detect_player_1(frame, self.court_detector)
@@ -88,6 +95,10 @@ class TennisVideoProcessor:
 
         self.video.release()
         print('Finished!')
+        self.detection_model.find_player_2_box()
+        
+        self.lines = lines_arr
+        
         if self.player_1_boxes is None or self.player_2_boxes is None:
             self._save_player_boxes()
         self._save_mid_output()
@@ -148,10 +159,10 @@ class TennisVideoProcessor:
         self.player_2_boxes = player2_boxes
 
         df = pd.DataFrame(self.player_1_boxes)
-        df.to_csv('csvout/player1_boxes.csv', index=False)
+        df.to_csv('FinalPipeline/csvout/player1_boxes.csv', index=False)
 
         df = pd.DataFrame(self.player_2_boxes)
-        df.to_csv('csvout/player2_boxes.csv', index=False)
+        df.to_csv('FinalPipeline/csvout/player2_boxes.csv', index=False)
 
     def _save_mid_output(self):
         frame_i = 0

@@ -338,33 +338,6 @@ class CourtDetector:
         court[court > 0] = 1
         return court
 
-  # def _get_court_accuracy(self, verbose=0):
-  #       """
-  #       Calculate court accuracy after detection
-  #       """
-  #       frame = self.frame.copy()
-  #       gray = self._threshold(frame)
-  #       gray[gray > 0] = 1
-  #       gray = cv2.dilate(gray, np.ones((9, 9), dtype=np.uint8))
-  #       court = self.get_warped_court()
-  #       total_white_pixels = sum(sum(court))
-  #       sub = court.copy()
-  #       sub[gray == 1] = 0
-  #       accuracy = 100 - (sum(sum(sub)) / total_white_pixels) * 100
-  #       if verbose:
-  #           plt.figure()
-  #           plt.subplot(1, 3, 1)
-  #           plt.imshow(gray, cmap='gray')
-  #           plt.title('Grayscale frame'), plt.xticks([]), plt.yticks([])
-  #           plt.subplot(1, 3, 2)
-  #           plt.imshow(court, cmap='gray')
-  #           plt.title('Projected court'), plt.xticks([]), plt.yticks([])
-  #           plt.subplot(1, 3, 3)
-  #           plt.imshow(sub, cmap='gray')
-  #           plt.title('Subtraction result'), plt.xticks([]), plt.yticks([])
-  #           plt.show()
-  #       return accuracy
-
 
   def track_court(self, frame):
         """
@@ -482,27 +455,3 @@ def sort_intersection_points(intersections):
     p34 = sorted(p34, key=lambda x: x[0])
     return p12 + p34
 
-# def display_lines_on_frame(frame, horizontal=(), vertical=()):
-#     """
-#     Display lines on frame for horizontal and vertical lines
-#     """
-
-#     '''cv2.line(frame, (int(len(frame[0]) * 4 / 7), 0), (int(len(frame[0]) * 4 / 7), 719), (255, 255, 0), 2)
-#     cv2.line(frame, (int(len(frame[0]) * 3 / 7), 0), (int(len(frame[0]) * 3 / 7), 719), (255, 255, 0), 2)'''
-#     for line in horizontal:
-#         x1, y1, x2, y2 = line
-#         cv2.line(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-#         cv2.circle(frame, (x1, y1), 1, (255, 0, 0), 2)
-#         cv2.circle(frame, (x2, y2), 1, (255, 0, 0), 2)
-
-#     for line in vertical:
-#         x1, y1, x2, y2 = line
-#         cv2.line(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-#         cv2.circle(frame, (x1, y1), 1, (255, 0, 0), 2)
-#         cv2.circle(frame, (x2, y2), 1, (255, 0, 0), 2)
-
-#     cv2.imshow('court', frame)
-#     if cv2.waitKey(0) & 0xff == 27:
-#         cv2.destroyAllWindows()
-#     # cv2.imwrite('../report/t.png', frame)
-#     return frame

@@ -8,6 +8,7 @@ from CameraModel import CameraModel
 import os
 import plotly.graph_objects as go
 import plotly.offline as pyo
+import cv2
 
 def plane_from_points(p1, p2, p3):
     v1 = p2 - p1
@@ -15,10 +16,31 @@ def plane_from_points(p1, p2, p3):
     normal = np.cross(v1, v2)
     normal /= np.linalg.norm(normal)  # Normalize the normal vector
     return normal
+def rescale_points_np(points, original_size, new_size):
+    """
+    Rescales points from the original resolution to the new resolution using NumPy.
+    
+    :param points: NumPy array of shape (n, 2) representing points (x, y).
+    :param original_size: Tuple representing the original resolution (width, height).
+    :param new_size: Tuple representing the new resolution (width, height).
+    :return: NumPy array of shape (n, 2) representing the rescaled points.
+    """
+    original_width, original_height = original_size
+    new_width, new_height = new_size
+    
+    scale_x = new_width / original_width
+    scale_y = new_height / original_height
+    
+    # Create a scaling array
+    scaling_factors = np.array([scale_x, scale_y])
+    
+    # Rescale points
+    rescaled_points = points * scaling_factors
+    return rescaled_points
 
 # function to transform in homogeneous coordinates
 def homogeneous(x, y, image_size=720):
-    return np.array([x, image_size-y, 1])
+    return np.array([x, y, 1])
 # function to project on ground plane
 def project_on_ground_plane(M, point):
     point = np.dot(M,point)
@@ -65,20 +87,23 @@ def intersect_line_plane(p0, p1, p_co, p_no, epsilon=1e-6):
 
 
 if __name__ == '__main__':
+    v_in = 'FinalPipeline/vin/input.mp4'
     if os.path.exists('FinalPipeline/csvout/output.csv'):
         trajectory = pd.read_csv('FinalPipeline/csvout/output.csv')
     else:
-        tracker = BallTracker(model_path='FinalPipeline/Tracking/models/tracknet.pt', extrapolation=True)
-    
-        trajectory=tracker.track_ball('FinalPipeline/vin/input.mp4', 'FinalPipeline/vout/output.mp4', 'FinalPipeline/csvout/output.csv')
+        tracker = BallTracker(model_path='FinalPipeline/Tracking/models/tracknet.pt', extrapolation=True, outlier_thresh=50)
+        trajectory=tracker.track_ball(v_in, 'FinalPipeline/vout/output.mp4', 'FinalPipeline/csvout/output.csv')
         print(trajectory)
     bounces, ix_5, x,y = detect_bounces(trajectory, 'FinalPipeline/csvout/bounces.csv', path_to_video='FinalPipeline/vout/output.mp4', path_to_output_video='FinalPipeline/vout/output_bounces.mp4')
-    #print(bounces)
+    print(bounces)
     processor= TennisVideoProcessor('FinalPipeline/vin/input.mp4', 'FinalPipeline/vout/output_map.mp4', coordsfile='FinalPipeline/csvout/bounces.csv')
+    print(processor.output_height)
+    print(processor.output_width)
     # if csvout boxes do not exist, detect players
     if processor.player_1_boxes is None or processor.player_2_boxes is None:
         processor.detect_players()
-    # draw minimap on current output video
+    # # draw minimap on current output video
+    
     processor.track_court()
     processor.draw_court_and_players(input_video_path='FinalPipeline/vout/output_bounces.mp4')
     processor.draw_minimap(input_video_path='FinalPipeline/vout/court_and_players.mp4')
@@ -89,7 +114,7 @@ if __name__ == '__main__':
             ])
     E_top = np.array([0,  1188, 107])
     F_top = np.array([1279,1188, 107])
-    camera = CameraModel('FinalPipeline/vin/input.mp4', ground_points, E_top, F_top)
+    camera = CameraModel(v_in, ground_points, E_top, F_top)
     
     
     # if camera matrix does not exist, select points and calibrate
@@ -100,9 +125,11 @@ if __name__ == '__main__':
         camera.load_camera_matrix()
         camera.load_points()
     camera.find_camera_center()
+    
+    
     print('Intersection point:', camera.intersection_point)
+    print('Flipped intersection point:', camera.flipped_intersection_point)
     camera_center=camera.intersection_point
-    print('Camera matrix:', camera.M)
     
     # plot baounces in 3d
     df_bounces= pd.read_csv('FinalPipeline/csvout/bounces.csv')
@@ -116,6 +143,16 @@ if __name__ == '__main__':
     y = camera.image_height-y
     x = bounces['x'].values
     
+    # rescaling
+    
+    old_res = tuple([camera.image_width, camera.image_height])
+    new_res= (1280, 720)
+    
+    bounces_coords = np.array([x, y])
+    bounces_coords = rescale_points_np(bounces_coords.T, old_res, new_res)
+    x = bounces_coords[:, 0]
+    y = bounces_coords[:, 1]
+    
     # fint top left corner of image
     top_left = np.array([0,camera.image_height,1])
     # project on the ground
@@ -128,13 +165,14 @@ if __name__ == '__main__':
     #understand if the ball is going up or down
     if y[0] < y[1]:
         criteria = 1
-    initial_criteria = criteria
-    image_y=720
+    initial_criteria = criteria    
+    
+    
     fig = go.Figure()
     # y distance E_top and camera center
     y_distance = E_top[1] - camera_center[1]
 
-    center_flipped = np.array([camera_center[0],camera_center[1]+ 2*top_left_ground[1], camera_center[2]]) 
+    center_flipped = camera.flipped_intersection_point
     #fig.add_trace(go.Scatter3d(x=[camera_center[0], center_flipped[0]], y=[camera_center[1], center_flipped[1]], z=[camera_center[2], center_flipped[2]], mode='markers+lines', name='Camera Center'))
     fig.add_trace(go.Scatter3d(x=[E_top[0], F_top[0]], y=[E_top[1], F_top[1]], z=[E_top[2], F_top[2]], mode='markers+lines', name='Original', marker=dict(color='green', size=2)))
     indexes= []
@@ -145,7 +183,7 @@ if __name__ == '__main__':
     for i in range(len(y)-1):
         if criteria == 1:
             if y[i+1] > y[i]:
-                print("Bounce on player at point: ({}, {})".format(x[i], y[i]))
+                print("Bounce on player 1 at point: ({}, {})".format(x[i], y[i]))
                 #plt.scatter(x[i], y[i], c='r')
                 # add i label
                 #plt.text(x[i], y[i], str(i+1), color='red', fontsize=12)
@@ -161,6 +199,13 @@ if __name__ == '__main__':
                 top_left = box[0]
                 bottom_right = box[1]
                 bottom_left = (top_left[0], bottom_right[1])
+                
+                bottom_right = np.array([bottom_right[0], camera.image_height- bottom_right[1]])
+                bottom_left = np.array([bottom_left[0], camera.image_height-bottom_left[1]])
+                print(f'Bottom right: {bottom_right}, Bottom left: {bottom_left}')
+                
+                bottom_right = rescale_points_np(bottom_right, old_res, new_res)
+                bottom_left = rescale_points_np(bottom_left, old_res, new_res)
                 
                 bottom_right = homogeneous(bottom_right[0], bottom_right[1])
                 bottom_left = homogeneous(bottom_left[0], bottom_left[1])
@@ -196,7 +241,7 @@ if __name__ == '__main__':
                 
         if criteria == 0:
             if y[i+1] < y[i]:
-                print("Bounce on player at point: ({}, {})".format(x[i], y[i]))
+                print("Bounce on player 2 at point: ({}, {})".format(x[i], y[i]))
                 #plt.scatter(x[i], y[i], c='r')
                 #plt.text(x[i], y[i], str(i+1), color='red', fontsize=12)
                 indexes.append(i)
@@ -210,6 +255,13 @@ if __name__ == '__main__':
                     top_left = box[0]
                     bottom_right = box[1]
                     bottom_left = (top_left[0], bottom_right[1])
+                    
+                    bottom_right = np.array([bottom_right[0], camera.image_height- bottom_right[1]])
+                    bottom_left = np.array([bottom_left[0], camera.image_height-bottom_left[1]])
+                    print(f'Bottom right: {bottom_right}, Bottom left: {bottom_left}')
+                    
+                    bottom_right = rescale_points_np(bottom_right, old_res, new_res)
+                    bottom_left = rescale_points_np(bottom_left, old_res, new_res)
                     
                     bottom_right = homogeneous(bottom_right[0], bottom_right[1])
                     bottom_left = homogeneous(bottom_left[0], bottom_left[1])
@@ -231,11 +283,14 @@ if __name__ == '__main__':
                     
                     #get plane points and normal
                     p7, p8, normal = find_plane_points_normal(ground_bottom_left, ground_bottom_right, 700)
-                    intersection_point = intersect_line_plane(center_flipped, ground_bounce, p8, normal)
-                    intersections_p2.append(intersection_point)
+                    if ground_bounce[1] > ground_bottom_left[1]:
+                        ground_symm = np.array([ground_bounce[0], 2*p7[1]-ground_bounce[1], ground_bounce[2]])
+                        intersection_point = intersect_line_plane(center_flipped, ground_symm, p8, normal)
+                    else:
+                        intersection_point = intersect_line_plane(center_flipped, ground_bounce, p8, normal)
                     #int_trace = go.Scatter3d(x=[intersection_point[0]], y=[intersection_point[1]], z=[intersection_point[2]], mode='markers', name='Intersection Point', marker=dict(color='blue', size=2))
                     #fig.add_trace(int_trace)
-                
+                    intersections_p2.append(intersection_point)
                 
                 criteria = 1
             else:
@@ -253,7 +308,10 @@ if __name__ == '__main__':
     # scatter ground 
     ground_p = np.array(ground_p)
     fig.add_trace(go.Scatter3d(x=ground_p[:, 0], y=ground_p[:, 1], z=ground_p[:, 2], mode='markers', name='Ground P1', marker=dict(color='orange', size=3)))
-
+    # scatter camera center
+    centers= np.array([camera_center, center_flipped])
+    fig.add_trace(go.Scatter3d(x=centers[:, 0], y=centers[:, 1], z=centers[:, 2], mode='markers', name='Camera Center', marker=dict(color='green', size=3)))
+    
     # tennis court
     court = np.array([[91,2377,0], [1188,2377,0], [1188,0,0],[91,0,0]])
     # plot tennis court mesh

@@ -12,9 +12,11 @@ class CameraModel:
         self.points=None
         self.M=None 
         self.intersection_point=None
+        self.flipped_intersection_point=None
         self.E_top = E_top
         self.F_top = F_top
         self.image_height = self.video.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        self.image_width = self.video.get(cv2.CAP_PROP_FRAME_WIDTH)
     
     def selct_points_and_calibrate(self):
         # select 4 points on the video to calibrate the camera
@@ -42,7 +44,29 @@ class CameraModel:
         self.points = self.points.astype(np.float32)
         
         self.points[:,1] = self.video.get(cv2.CAP_PROP_FRAME_HEIGHT) - self.points[:,1]
+        
         np.save('points.npy', self.points)
+    def rescale_points_np(self, points, original_size, new_size):
+        """
+        Rescales points from the original resolution to the new resolution using NumPy.
+        
+        :param points: NumPy array of shape (n, 2) representing points (x, y).
+        :param original_size: Tuple representing the original resolution (width, height).
+        :param new_size: Tuple representing the new resolution (width, height).
+        :return: NumPy array of shape (n, 2) representing the rescaled points.
+        """
+        original_width, original_height = original_size
+        new_width, new_height = new_size
+        
+        scale_x = new_width / original_width
+        scale_y = new_height / original_height
+        
+        # Create a scaling array
+        scaling_factors = np.array([scale_x, scale_y])
+        
+        # Rescale points
+        rescaled_points = points * scaling_factors
+        return rescaled_points
 
     def find_intersection_point(self,p1, p2, p3, p4):
         # Extracting coordinates for line 1
@@ -97,6 +121,9 @@ class CameraModel:
         # Convert the points to numpy array
         image_points = self.points[:4]
         ground_points = np.array(self.ground_points)
+        # rescale image points
+        image_points = self.rescale_points_np(image_points, (self.image_width, self.image_height), (1280, 720))
+        image_points = image_points.astype(np.float32)
         # transform in float32
         ground_points = ground_points.astype(np.float32)
         # subtract image height from y
@@ -224,7 +251,8 @@ class CameraModel:
         print(self.points)
         E_image = np.array(self.points[4])
         F_image = np.array(self.points[5])
-        
+        E_image = self.rescale_points_np(E_image,(self.image_width, self.image_height), (1280, 720))
+        F_image = self.rescale_points_np(F_image, (self.image_width, self.image_height), (1280, 720))
         E_transformed = np.dot(self.M, np.array([E_image[0], E_image[1], 1]))
         E_transformed /= E_transformed[2]
 
@@ -239,4 +267,11 @@ class CameraModel:
         print('E_top:', self.E_top)
         print('F_top:', self.F_top)
         self.intersection_point = self.plot_lines_points_intersection_3d_plotly(E_g, self.E_top, F_g, self.F_top)
+        
+        # find symmetric center
+        E_g_simm = np.array([E_g[0], 2*self.E_top[1]-E_g[1], E_g[2]])
+        F_g_simm = np.array([F_g[0], 2*self.F_top[1]-F_g[1], F_g[2]])
+        self.flipped_intersection_point = self.plot_lines_points_intersection_3d_plotly(E_g_simm, self.E_top, F_g_simm, self.F_top)
+        
+
         

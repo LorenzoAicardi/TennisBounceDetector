@@ -12,7 +12,7 @@ import os
 
 
 class BallTracker:
-    def __init__(self, model_path, extrapolation, batch_size=2):
+    def __init__(self, model_path, extrapolation, batch_size=2, outlier_thresh=100):
         
         self.model = BallTrackerNet()
         if(torch.cuda.is_available()):
@@ -23,6 +23,7 @@ class BallTracker:
         self.model = self.model.to(self.device)
         self.extrapolation = extrapolation
         self.batch_size = batch_size
+        self.outlier_thresh = outlier_thresh
     
     
     def track_ball(self, video_path, video_out_path, csv_out_path):
@@ -30,8 +31,8 @@ class BallTracker:
         frames, fps = self.__read_video(video_path)
 
         ball_track, dists = self.__infer_model(frames, self.model)
-        ball_track = self.__remove_outliers(ball_track, dists)    
-        
+        ball_track = self.__remove_outliers(ball_track, dists, self.outlier_thresh)  
+        #ball_track = self.remove_outliers(ball_track, max_deviation=50)
         if self.extrapolation:
             subtracks = self.__split_track(ball_track)
             for r in subtracks:
@@ -116,7 +117,7 @@ class BallTracker:
     
         return ball_track, dists 
 
-    def __remove_outliers(self,ball_track, dists, max_dist = 100):
+    def __remove_outliers(self,ball_track, dists, max_dist = 50):
         """ Remove outliers from model prediction    
         :params
             ball_track: list of detected ball points
@@ -132,7 +133,43 @@ class BallTracker:
                 outliers.remove(i)
             elif dists[i-1] == -1:
                 ball_track[i-1] = (None, None)
-        return ball_track  
+        return ball_track
+    
+    def remove_outliers(self, ball_track, max_deviation=50):
+        """
+        Remove outliers from ball_track based on x and y differences between consecutive points.
+        
+        :params
+            ball_track: list of detected ball points
+            max_deviation: maximum allowed deviation for x or y differences
+        :return
+            cleaned_track: list of ball points with outliers removed
+        """
+        def is_valid_point(point):
+            return point is not None and all(coord is not None for coord in point)
+        
+        n = len(ball_track)
+        cleaned_track = ball_track.copy()
+        outliers=[]
+        
+        # Calculate x and y differences
+        for i in range(1, n-1):
+            if is_valid_point(ball_track[i-1]) and is_valid_point(ball_track[i]) and is_valid_point(ball_track[i+1]):
+                x_diff_prev = abs(ball_track[i][0] - ball_track[i-1][0])
+                y_diff_prev = abs(ball_track[i][1] - ball_track[i-1][1])
+                x_diff_next = abs(ball_track[i+1][0] - ball_track[i][0])
+                y_diff_next = abs(ball_track[i+1][1] - ball_track[i][1])
+                
+                if (x_diff_prev > max_deviation or x_diff_next > max_deviation) or \
+                (y_diff_prev > max_deviation or y_diff_next > max_deviation):
+                    cleaned_track[i] = (None, None)
+        
+        # Remove points set to None
+        #cleaned_track = [point for point in cleaned_track if is_valid_point(point)]
+        
+        return cleaned_track
+        
+
 
     def __split_track(self,ball_track, max_gap=4, max_dist_gap=80, min_track=5):
         """ Split ball track into several subtracks in each of which we will perform

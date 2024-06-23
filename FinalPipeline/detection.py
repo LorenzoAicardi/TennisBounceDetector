@@ -149,7 +149,7 @@ class DetectionModel:
             else:
                 self.persons_boxes[int(box[4])] = [box[:4]]
                 self.persons_first_appearance[int(box[4])] = frame_num
-
+        #print(boxes)
         return boxes
 
     def calculate_all_persons_dists(self):

@@ -1,7 +1,13 @@
 # TennisBounceDetector
 
-Command for inference: `python3 infer_on_video.py --model_path='path_to_repo/TennisBounceDetector/models/tracknet.pt' --video_path='path_to_repo/TennisBounceDetector/videoin/test_tracknet.mp4' --video_out_path='path_to_repo/TennisBounceDetector/videoout/output_tracknet.mp4' --extrapolation`
+Experimental repository of the IACV project 2023-2024 curated by Lorenzo Aicardi and Gloria Desideri. The project finds the bounces of a tennis ball from a single view video and tries to find their 3D coordinates.
 
-Command to draw bouncing points on video: `python3 bounce.py --path_to_csv='outcsv/g3c1.csv' --path_to_video='videoout/g3c1out.mp4' --path_to_output_video='g3c1predict.mp4'`
+To run the project take a video and place it in the `vin` folder naming it `input.mp4`. Delete the files in `csvout` folder, the `points.npy` file and `camera_matrix.npy` file.
+
+Later this process could be automated.
+
+finally run `python FinalPipeline/main.py`
 
 The model and the code for TrackNet was taken from the following repository: https://github.com/yastrebksv/TrackNet
+
+Court and player tracking from : https://github.com/ArtLabss/tennis-tracking
